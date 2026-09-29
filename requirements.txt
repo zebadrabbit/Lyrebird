@@ -1,0 +1,25 @@
+# CUDA 12.8 wheels (needed for RTX 50-series; works on older NVIDIA cards too).
+# CPU-only? Drop the index line and the "+cu128" suffixes.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.7.1+cu128
+torchaudio==2.7.1+cu128
+
+# chatterbox-tts 0.1.7's own deps, minus its torch==2.6.0 pin and the gradio demo UI.
+# chatterbox-tts itself is installed with --no-deps (see build.ps1).
+numpy>=1.24,<2
+librosa==0.11.0
+s3tokenizer
+transformers==5.2.0
+diffusers==0.29.0
+resemble-perth>=1.0.0
+conformer==0.3.2
+safetensors==0.5.3
+spacy-pkuseg
+pykakasi==2.3.0
+pyloudnorm
+omegaconf
+setuptools<81  # resemble-perth imports pkg_resources, removed from newer setuptools
+
+# Lyrebird
+sounddevice
+soundfile
