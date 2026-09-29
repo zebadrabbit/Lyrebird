@@ -22,6 +22,8 @@ Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebir
     --add-binary "$PSScriptRoot\.venv\Scripts\uv.exe;." `
     --add-data "$PSScriptRoot\lyrebird.py;." `
     --add-data "$PSScriptRoot\requirements.txt;." `
+    --add-data "$PSScriptRoot\brand\lyrebird.ico;." `
+    --icon "$PSScriptRoot\brand\lyrebird.ico" `
     launcher.py
 
 New-Item -ItemType Directory -Force dist | Out-Null

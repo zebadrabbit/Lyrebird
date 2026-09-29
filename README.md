@@ -1,3 +1,5 @@
+<img src="brand/lyrebird-256.png" alt="Lyrebird icon" width="96" align="right">
+
 # Lyrebird
 
 [![CI](https://github.com/zebadrabbit/Lyrebird/actions/workflows/ci.yml/badge.svg)](https://github.com/zebadrabbit/Lyrebird/actions/workflows/ci.yml)
@@ -151,6 +153,7 @@ test_lyrebird.py   tests for the text chunker and dialogue parser
 requirements.txt   runtime dependencies installed by the launcher
 build.ps1          builds dist\Lyrebird-win64.zip
 HOWTO.md           usage guide with screenshots (docs/images/)
+brand/             logo, wordmarks and app icon (lyrebird.ico, SVG, PNG)
 ```
 
 ## Responsible use

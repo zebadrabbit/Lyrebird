@@ -161,6 +161,10 @@ def main():
         pass
     HOME.mkdir(parents=True, exist_ok=True)
     root = tk.Tk()
+    for icon in (HERE / "lyrebird.ico", HERE / "brand" / "lyrebird.ico"):  # release bundle, then source tree
+        if icon.exists():
+            root.iconbitmap(default=str(icon))
+            break
     if MARKER.exists() and MARKER.read_text() == setup_id():
         launch(root)
     else:

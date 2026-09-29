@@ -544,9 +544,16 @@ class App:
 def main():
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)  # crisp text on high-DPI screens
+        # Own taskbar identity, so Windows shows the Lyrebird icon rather than python.exe's.
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Lyrebird.App")
     except (AttributeError, OSError):
         pass
     root = tk.Tk()
+    here = Path(__file__).resolve().parent
+    for icon in (here / "lyrebird.ico", here / "brand" / "lyrebird.ico"):  # release bundle, then source tree
+        if icon.exists():
+            root.iconbitmap(default=str(icon))  # default= also covers dialogs
+            break
 
     def report(exc, val, tb):  # errors in Tk callbacks (bad output folder, unplayable file) go to a dialog
         import traceback
