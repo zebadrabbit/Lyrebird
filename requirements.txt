@@ -1,11 +1,11 @@
-# CUDA 12.8 wheels (needed for RTX 50-series; works on older NVIDIA cards too).
-# CPU-only? Drop the index line and the "+cu128" suffixes.
---extra-index-url https://download.pytorch.org/whl/cu128
-torch==2.7.1+cu128
-torchaudio==2.7.1+cu128
+# Runtime dependencies. Installed on the user's PC by launcher.py on first run with
+#   uv pip install -r requirements.txt --torch-backend auto
+# which picks the CUDA build of torch that fits the user's NVIDIA driver (or the CPU build if there is no GPU).
+torch==2.7.1
+torchaudio==2.7.1
 
-# chatterbox-tts 0.1.7's own deps, minus its torch==2.6.0 pin and the gradio demo UI.
-# chatterbox-tts itself is installed with --no-deps (see build.ps1).
+# chatterbox-tts 0.1.7's own deps, minus its torch==2.6.0 pin (no RTX 50-series support) and the gradio demo UI.
+# chatterbox-tts itself is installed with --no-deps (see CHATTERBOX in launcher.py).
 numpy>=1.24,<2
 librosa==0.11.0
 s3tokenizer

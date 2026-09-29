@@ -1,105 +1,156 @@
 # Lyrebird
 
+[![CI](https://github.com/zebadrabbit/Lyrebird/actions/workflows/ci.yml/badge.svg)](https://github.com/zebadrabbit/Lyrebird/actions/workflows/ci.yml)
+
 A small Windows desktop app for voice cloning with [Chatterbox TTS](https://github.com/resemble-ai/chatterbox) by Resemble AI.
 
-1. **Record (10s)** of your voice, or **Import audio** of someone who has agreed to be cloned.
-2. Type some text.
+1. **Record (10s)** of your voice, or **Import** a clip of someone who has agreed to be cloned.
+2. Type some text. It can be a dialogue between several saved voices, with `[laugh]`-style sound tags.
 3. Click **Render**. You get a `.wav` file.
 
-Everything runs locally on your PC. The network is used only to download the models on first use: the weights come from Hugging Face, and Multilingual also fetches a small Chinese word-segmentation model from GitHub. When a model loads, Lyrebird also checks Hugging Face for updates. To stop that, see `HF_HUB_OFFLINE` below.
+![Lyrebird rendering a dialogue](docs/images/rendering.png)
+
+Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWTO.md](HOWTO.md).**
 
 > The name comes from the lyrebird, an Australian bird that can copy almost any sound it hears.
 
 ---
 
-## Quick start (prebuilt executable)
+## Quick start
 
-1. Download `Lyrebird-win64.zip` from the Releases page and unzip it anywhere.
-2. Run `Lyrebird\Lyrebird.exe`.
-3. The first **Render** downloads the chosen model to your Hugging Face cache (`%USERPROFILE%\.cache\huggingface`). Each model is roughly 3 to 4 GB. After that, it also works offline.
+1. Download `Lyrebird-win64.zip` (about 33 MB) from the [Releases page](https://github.com/zebadrabbit/Lyrebird/releases) and unzip it anywhere.
+2. Run `Lyrebird\Lyrebird.exe`. The exe isn't code-signed yet, so if Windows SmartScreen appears, click **More info → Run anyway**.
+3. **First launch only:** a setup window downloads Python, PyTorch and Chatterbox into `%LOCALAPPDATA%\Lyrebird`. That's about a 3 GB download with an NVIDIA GPU, and much less without one. It needs about 6 GB of free disk space once unpacked. The window shows the current step, how much is on disk so far and how long it has taken. Setup took under 2 minutes on a fast connection. Later launches start straight away.
+4. **First render with each model:** Lyrebird downloads that model, roughly 3 to 4 GB, to your Hugging Face cache. The status line shows the progress.
 
-**Requirements:** 64-bit Windows 10 or 11. An NVIDIA GPU is strongly recommended (the CUDA 12.8 build supports GTX 900 series through RTX 50 series; about 6 GB of VRAM is recommended; the models use 3 to 4 GB while rendering). Lyrebird falls back to the CPU when there is no GPU. The CPU works but is slow: expect tens of seconds or more per sentence.
+**Requirements:** 64-bit Windows 10 or 11 and an internet connection for the first run. An NVIDIA GPU is strongly recommended: about 6 GB of VRAM, since the models use 3 to 4 GB while rendering. Setup picks the PyTorch build that matches your NVIDIA driver. Without an NVIDIA GPU, Lyrebird installs the CPU build and runs on the CPU. That works, but slowly: expect tens of seconds or more per sentence.
 
-## Using it
+## Features
 
-| Section | What it does |
-|---|---|
-| **1. Voice to clone** | **Record (10s)** records 10 seconds from your default microphone and saves it as `reference_<time>.wav` in the output folder. **Import audio...** accepts `.wav`, `.mp3`, `.flac` or `.ogg`. **Play** plays the reference and **Clear** removes it. With no reference set, the model's built-in voice is used. |
-| **2. Text to speak** | Any length. Text is split at sentence ends and line breaks, and the pieces are packed into chunks of up to 300 characters (100 for Chinese, Japanese and Korean). A single sentence longer than that is cut between words. Each chunk is rendered separately, and the chunks are joined with a 0.2 s gap. The models stop after about 40 s of audio per chunk, which is why the text is split. |
-| **3. Options** | See [Options](#options) below. |
-| **4. Render** | Writes `lyrebird_<YYYYmmdd_HHMMSS>.wav` into the **Save to** folder (default `Documents\Lyrebird`). **Play output** plays the last render and **Open folder** opens the output folder in Explorer. |
-
-**Tips for a good clone:** use 5 to 20 seconds of one person speaking naturally, with no music, no other voices and little room echo. If you use a reference with Turbo, it must be longer than 5 seconds. If you record, start talking right away and keep going for the full 10 seconds.
+- **Voice library:** record 10 s from any microphone or import wav/mp3/flac/ogg, give it a name, and it stays in the **Voice** list. Voices are stored in `Documents\Lyrebird\voices`.
+- **Microphone picker:** lists every input device. Newly plugged-in mics show up the next time you open the list.
+- **Multi-speaker dialogue:** start a line with a saved voice's name to switch speaker:
+  ```
+  Alice: Did you hear the news?
+  Bob: No, what happened?
+  Built-in: I'm the narrator.
+  ```
+  A line only switches speaker when the name matches a saved voice (ignoring capitals). `Built-in` is the model's own voice. Lines without a name continue with the current speaker, and text before the first name uses the voice selected in the **Voice** list.
+- **Sound tags (Turbo model):** type or insert tags such as `[laugh]`, `[sigh]` and `[whispering]`. They're highlighted blue when the selected model supports them. With other models they turn amber and are left out when rendering, so they aren't read aloud. Unknown tags are underlined in red.
+- **Three models:** Standard (English), Turbo (English, fast) and Multilingual (23 languages).
+- **Any length of text:** text is split at sentence ends and line breaks into chunks of up to 300 characters (100 for Chinese, Japanese and Korean). The chunks are rendered one by one and joined with a 0.2 s gap. Splitting is needed because the models stop at about 40 s of audio per chunk.
 
 ## Options
 
 | Option | Range (default) | Models | Effect |
 |---|---|---|---|
-| **Model** | Standard / Turbo / Multilingual (Standard) | all | **Standard**: the original 0.5B English model, best quality and supports every option. **Turbo**: a smaller (350M) English model that is much faster and understands tags such as `[laugh]`, `[chuckle]` and `[cough]` inline in the text. **Multilingual**: the 0.5B model covering the 23 languages listed below. Only one model is kept in memory; switching models unloads the previous one. |
-| **Language** | 23 languages (en) | Multilingual | The language of the *text*. The reference voice can be in any language, but a reference in the same language as the text sounds most natural. Supported: Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish. |
+| **Voice** | saved voices or (Built-in voice) | all | Who speaks. It's also the speaker for any text before the first `Name:` line. |
+| **Microphone** | input devices (Windows default) | all | Used by **Record (10s)**. Records at the device's own sample rate; if the device has several channels, the loudest one is kept. |
+| **Model** | Standard / Turbo / Multilingual (Standard) | all | **Standard:** the original 0.5B English model. Best quality, and supports every option. **Turbo:** a smaller 350M English model that's much faster and understands [sound tags](#sound-tags). **Multilingual:** the 0.5B model for 23 languages. Only one model is kept in memory; switching models unloads the previous one. |
+| **Language** | 23 languages (en) | Multilingual | The language of the *text*. The voice sample can be in any language, but one in the same language as the text sounds most natural. Supported: Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish. |
 | **Exaggeration** | 0.25 – 2.0 (0.5) | Standard, Multilingual | Emotional intensity. At 0.5 the delivery is neutral. At 0.7 and above it becomes more dramatic and tends to speed up. Very high values can become unstable. |
-| **CFG / pace** | 0.0 – 1.0 (0.5) | Standard, Multilingual | Classifier-free guidance weight, i.e. how closely the output follows the reference's style. Lower values give slower, more deliberate speech. Try about 0.3 when you raise Exaggeration, or if the reference speaker talks fast. With Multilingual, use 0 when the reference is in a different language from the text, to reduce accent carry-over. On Standard, 0 is treated as 0.001 because Chatterbox 0.1.7 crashes at exactly 0. |
+| **CFG / pace** | 0.0 – 1.0 (0.5) | Standard, Multilingual | Classifier-free guidance weight, i.e. how closely the output follows the voice sample's style. Lower values give slower, more deliberate speech. Try about 0.3 when you raise Exaggeration, or when the voice sample talks fast. With Multilingual, set it to 0 when the voice sample is in a different language from the text, to reduce accent carry-over. On Standard, 0 is treated as 0.001 because Chatterbox 0.1.7 crashes at exactly 0. |
 | **Temperature** | 0.05 – 2.0 (0.8) | all | Sampling randomness. Lower values give flatter, more consistent speech. Higher values give more variety but also more mistakes. |
-| **Seed** | 0 – 2³¹−1 (0) | all | 0 gives a different take on every render. Any other number makes a render repeatable: same seed, text, reference, settings and hardware give the same result. |
-| **Save to** | folder (`Documents\Lyrebird`) | all | Where rendered files and recordings are written. The folder is created if it doesn't exist. |
+| **Seed** | 0 – 2³¹−1 (0) | all | 0 gives a different take on every render. Any other number makes a render repeatable: same seed, text, voice, settings and hardware give the same result. |
+| **Save to** | folder (`Documents\Lyrebird`) | all | Where renders are written, as `lyrebird_<YYYYmmdd_HHMMSS>.wav`. The folder is created if it doesn't exist. |
 
 Exaggeration and CFG are greyed out for Turbo because the Turbo model doesn't support them. Language is greyed out except for Multilingual.
 
 Output is mono, 24 kHz, 16-bit PCM WAV.
 
+### Sound tags
+
+Only the Turbo model supports these tags. They're from the Turbo model's own tokenizer:
+
+`[laugh]` `[chuckle]` `[sigh]` `[gasp]` `[cough]` `[clear throat]` `[sniff]` `[groan]` `[shush]` `[whispering]` `[angry]` `[happy]` `[sarcastic]` `[surprised]` `[fear]` `[crying]` `[dramatic]` `[narration]` `[advertisement]`
+
+### Where things are stored
+
+| Path | What's there |
+|---|---|
+| `%LOCALAPPDATA%\Lyrebird\` | The Python runtime, PyTorch and Chatterbox (`env`, `python`, `uv-cache`), plus `setup.log` and `lyrebird.log`. |
+| `Documents\Lyrebird\` | Your renders. Voices are in `voices\`. |
+| `%USERPROFILE%\.cache\huggingface\` | Model weights, about 3 to 4 GB per model used. |
+| `%USERPROFILE%\.pkuseg\` | The Chinese word-segmentation model, downloaded from GitHub the first time Multilingual loads. |
+
+**Uninstall:** delete the unzipped `Lyrebird` folder and `%LOCALAPPDATA%\Lyrebird`. To also free the model space, delete the `models--ResembleAI--chatterbox*` folders in the Hugging Face cache. If you used Multilingual, also delete `%USERPROFILE%\.pkuseg`. Your voices and renders in `Documents\Lyrebird` stay unless you delete them.
+
+**Network use:**
+
+- **First run:** setup downloads its packages from PyPI and the PyTorch index.
+- **First use of each model:** the weights come from Hugging Face. Multilingual also downloads the segmentation model from GitHub.
+- **Every model load:** Lyrebird checks Hugging Face for updates. Set `HF_HUB_OFFLINE=1` to stop this.
+
+Nothing you record or render leaves your PC.
+
 ### Environment variables
 
 | Variable | Effect |
 |---|---|
-| `HF_HOME` | Moves the Hugging Face cache, where the models are stored, somewhere other than `%USERPROFILE%\.cache\huggingface`. |
+| `HF_HOME` | Moves the Hugging Face cache somewhere other than `%USERPROFILE%\.cache\huggingface`. |
 | `HF_TOKEN` | Hugging Face access token. It isn't needed for the public Chatterbox models, but it avoids anonymous rate limits. |
 | `HF_HUB_OFFLINE=1` | Never contacts Hugging Face. The models must already be cached. |
-| `PKUSEG_HOME` | Where Multilingual stores its Chinese segmentation model (default `%USERPROFILE%\.pkuseg`). To use Multilingual offline, this folder must already be there, for example copied from a PC that has loaded the model once. |
+| `PKUSEG_HOME` | Where Multilingual stores its Chinese segmentation model (default `%USERPROFILE%\.pkuseg`). To use Multilingual offline, this folder must already be there. |
 
 ### Logs
 
-The `.exe` has no console window. Its output and errors go to `%LOCALAPPDATA%\Lyrebird\lyrebird.log`, which is overwritten on each launch. Please attach this file to bug reports.
+Lyrebird has no console window, so its output goes to log files in `%LOCALAPPDATA%\Lyrebird`:
+
+- `setup.log`: the first-run setup.
+- `lyrebird.log`: the app itself. It's overwritten on each launch.
+
+Please attach these to bug reports.
+
+## How the release works
+
+`Lyrebird.exe` is a small launcher (`launcher.py`) frozen with PyInstaller. It bundles [uv](https://docs.astral.sh/uv/) along with `lyrebird.py` and `requirements.txt`. On first run it does the following:
+
+1. `uv venv --managed-python --python 3.12` downloads a standalone Python that includes tkinter.
+2. `uv pip install -r requirements.txt --torch-backend auto` installs PyTorch 2.7.1 in the CUDA build that matches the NVIDIA driver, or the CPU build if there's no GPU. If no CUDA build fits, for example because the driver is too old, it retries with the CPU build. A network error doesn't trigger this fallback: setup stops and resumes the next time Lyrebird starts, so a GPU PC is never quietly left on the CPU build.
+3. `uv pip install --no-deps chatterbox-tts==0.1.7`. Chatterbox pins `torch==2.6.0`, which has no RTX 50-series (Blackwell) support, so `requirements.txt` lists its dependencies directly.
+
+A marker file stores a hash of `requirements.txt`. When a new release changes the dependencies, setup runs again; otherwise the launcher starts the app immediately. This keeps the download at about 33 MB instead of about 5 GB. Almost all of that 5 GB is PyTorch's CUDA libraries, which are now downloaded to the user's PC instead.
 
 ## Build from source
 
-You need Windows, Git and [uv](https://docs.astral.sh/uv/getting-started/installation/) (`winget install astral-sh.uv`).
+You need Windows, Git and uv (`winget install astral-sh.uv`).
 
 ```powershell
-git clone <this repo> Lyrebird
+git clone https://github.com/zebadrabbit/Lyrebird.git
 cd Lyrebird
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
 `build.ps1` does the following:
 
-1. Creates `.venv` with a uv-managed Python 3.12. The build uses uv's Python because python.org installs can omit tkinter.
-2. Installs `requirements.txt`, which contains PyTorch 2.7.1 with CUDA 12.8 plus Chatterbox's dependencies.
-3. Installs `chatterbox-tts==0.1.7` with `--no-deps`. Chatterbox pins `torch==2.6.0`, which has no RTX 50-series (Blackwell) support, so the build installs its dependencies itself in step 2.
-4. Runs the tests, then uses PyInstaller to build `dist\Lyrebird\` (a folder containing `Lyrebird.exe` and its libraries).
+1. Creates a small `.venv` with PyInstaller and uv.
+2. Runs the tests.
+3. Builds the launcher in `%TEMP%\lyrebird-build`. It builds there because OneDrive/Dropbox-synced folders lock freshly written files.
+4. Writes `dist\Lyrebird-win64.zip`.
 
-To ship it, zip the whole `dist\Lyrebird` folder. The CUDA build is several GB because most of it is PyTorch's CUDA libraries.
+Pushing a `v*` tag makes GitHub Actions build the zip and attach it to a GitHub Release.
 
-**CPU-only build**, which is much smaller: in `requirements.txt`, delete the `--extra-index-url` line and the `+cu128` suffixes, then delete `.venv` and rebuild.
-
-**Run without building:**
+**Run from source** (uses the same first-run setup as the release):
 
 ```powershell
-.venv\Scripts\python.exe lyrebird.py
+uv run --no-project --managed-python --python 3.12 launcher.py
 ```
 
 **Tests** (no model or GPU needed):
 
 ```powershell
-.venv\Scripts\python.exe test_lyrebird.py
+uv run --no-project --managed-python --python 3.12 test_lyrebird.py
 ```
 
 ## Project layout
 
 ```
-lyrebird.py        the whole app (tkinter GUI + Chatterbox wrapper)
-test_lyrebird.py   tests for the text chunker
-requirements.txt   pinned runtime dependencies
-build.ps1          venv setup + PyInstaller build
+lyrebird.py        the app: tkinter GUI + Chatterbox wrapper
+launcher.py        Lyrebird.exe: first-run setup window, then starts lyrebird.py
+test_lyrebird.py   tests for the text chunker and dialogue parser
+requirements.txt   runtime dependencies installed by the launcher
+build.ps1          builds dist\Lyrebird-win64.zip
+HOWTO.md           usage guide with screenshots (docs/images/)
 ```
 
 ## Responsible use
@@ -108,6 +159,7 @@ Only clone voices you have permission to use. Every file Chatterbox generates ca
 
 ## Credits and license
 
-- [Chatterbox](https://github.com/resemble-ai/chatterbox) TTS models and code: © Resemble AI, MIT License.
-- Lyrebird: MIT License, see [LICENSE](LICENSE).
-- Binary releases also bundle third-party packages under their own licenses. In particular, [pykakasi](https://codeberg.org/miurahr/pykakasi) (Japanese reading conversion, used by Multilingual) is GPL-3.0-or-later, so the distributed `.exe` bundle as a whole is covered by the GPL-3.0. The Lyrebird source code itself stays MIT. To build an MIT-only binary, remove the two `pykakasi` lines from `build.ps1` and add `--exclude-module pykakasi`. Japanese text then skips kanji-to-kana conversion.
+- **Lyrebird:** MIT License, see [LICENSE](LICENSE).
+- **[Chatterbox](https://github.com/resemble-ai/chatterbox):** TTS models and code © Resemble AI, MIT License.
+- **The release zip** contains the Lyrebird launcher, a Python runtime (PSF License), Tcl/Tk (BSD-style) and [uv](https://github.com/astral-sh/uv) (MIT/Apache-2.0).
+- **Packages downloaded during setup** come from PyPI and the PyTorch index under their own licenses, for example PyTorch (BSD-3-Clause) and [pykakasi](https://codeberg.org/miurahr/pykakasi) (GPL-3.0-or-later). Setup installs them on your PC; the release zip doesn't contain them.

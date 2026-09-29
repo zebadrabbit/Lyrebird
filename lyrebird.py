@@ -5,6 +5,7 @@ Record (or import) a short voice sample, type some text, hit Render, get a .wav.
 import ctypes
 import os
 import re
+import shutil
 import sys
 import textwrap
 import threading
@@ -13,12 +14,12 @@ import tkinter as tk
 import winsound
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Lyrebird"
 
-# A --windowed PyInstaller build has no console, so sys.stdout/stderr are None and
-# tqdm/print inside chatterbox would crash. Send them to a log file instead.
+# Under pythonw.exe there is no console, so sys.stdout/stderr are None and tqdm/print inside
+# chatterbox would crash. Send them to a log file instead. (The launcher already redirects output.)
 if sys.stdout is None or sys.stderr is None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
     sys.stdout = sys.stderr = open(APP_DIR / "lyrebird.log", "w", encoding="utf-8", buffering=1)
@@ -40,7 +41,18 @@ LANGUAGES = {
     "ko": "Korean", "ms": "Malay", "nl": "Dutch", "no": "Norwegian", "pl": "Polish", "pt": "Portuguese",
     "ru": "Russian", "sv": "Swedish", "sw": "Swahili", "tr": "Turkish", "zh": "Chinese",
 }
-AUDIO_TYPES = [("Audio", "*.wav *.mp3 *.flac *.ogg"), ("All files", "*.*")]
+AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg")
+AUDIO_TYPES = [("Audio", " ".join(f"*{e}" for e in AUDIO_EXTS))]
+BUILTIN_VOICE = "(Built-in voice)"
+BUILTIN_NAME = "Built-in"  # speaker name for the built-in voice in dialogue scripts
+DEFAULT_MIC = "(Windows default microphone)"
+# Paralinguistic tags the Turbo model's tokenizer knows (added_tokens.json in ResembleAI/chatterbox-turbo).
+TURBO_TAGS = (
+    "[laugh]", "[chuckle]", "[sigh]", "[gasp]", "[cough]", "[clear throat]", "[sniff]", "[groan]", "[shush]",
+    "[whispering]", "[angry]", "[happy]", "[sarcastic]", "[surprised]", "[fear]", "[crying]", "[dramatic]",
+    "[narration]", "[advertisement]",
+)
+TAG_RE = re.compile("|".join(map(re.escape, TURBO_TAGS)))
 
 
 def chunk_text(text, limit=CHUNK_CHARS):
@@ -60,6 +72,69 @@ def documents_dir():
     buf = ctypes.create_unicode_buffer(260)
     ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf)  # CSIDL_PERSONAL; follows OneDrive redirection
     return Path(buf.value) if buf.value else Path.home()
+
+
+def voices_dir():
+    path = documents_dir() / "Lyrebird" / "voices"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def voice_files(name):
+    """Every sample saved under this voice name, whatever its extension (Windows names ignore case)."""
+    return [p for p in voices_dir().iterdir() if p.stem.lower() == name.lower() and p.suffix.lower() in AUDIO_EXTS]
+
+
+def drop_older_versions(path):
+    """After saving a voice, delete samples with the same name but another extension, which would shadow it."""
+    for p in voice_files(path.stem):
+        if p.name.lower() != path.name.lower():
+            p.unlink()
+
+
+def input_devices():
+    """{name: device index} of microphones. Prefers WASAPI: full device names, one entry per device."""
+    import sounddevice as sd
+
+    apis = sd.query_hostapis()
+    api = next((a for a in apis if "WASAPI" in a["name"]), apis[sd.default.hostapi])
+    return {sd.query_devices(i)["name"]: i for i in api["devices"] if sd.query_devices(i)["max_input_channels"] > 0}
+
+
+def dir_size(path):
+    total = 0
+    for root, _, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_size  # lstat: don't count HF cache symlinks twice
+            except OSError:  # file vanished mid-walk
+                pass
+    return total
+
+
+def strip_tags(text):
+    """Remove Turbo sound tags without gluing the neighbouring words together."""
+    return re.sub(r"[ \t]{2,}", " ", TAG_RE.sub(" ", text)).strip()
+
+
+def split_speakers(text, names):
+    """Split a dialogue script into [(speaker, text)].
+
+    A line starting with "Name:" switches to that speaker, but only when Name is in `names`
+    (case-insensitive), so ordinary text such as "Note: ..." is left alone. Text before the
+    first speaker line gets speaker None.
+    """
+    lookup = {n.lower(): n for n in names}
+    segments, speaker = [], None
+    for line in text.splitlines():
+        m = re.match(r"\s*([^:]{1,60}):(.*)", line)
+        if m and m.group(1).strip().lower() in lookup:
+            speaker, line = lookup[m.group(1).strip().lower()], m.group(2)
+        if segments and segments[-1][0] == speaker:
+            segments[-1][1].append(line)
+        else:
+            segments.append((speaker, [line]))
+    return [(who, "\n".join(lines).strip()) for who, lines in segments if "".join(lines).strip()]
 
 
 def stamp():
@@ -88,11 +163,28 @@ class Engine:
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS as Model
         else:
             from chatterbox.tts import ChatterboxTTS as Model
-        self.model = Model.from_pretrained(device=device)
+        from huggingface_hub.constants import HF_HUB_CACHE
+
+        loading = threading.Event()
+
+        def report_download():  # from_pretrained's own progress bars only reach the log file
+            start = dir_size(HF_HUB_CACHE)
+            while not loading.wait(1):
+                got = dir_size(HF_HUB_CACHE) - start
+                if got > 1e6:
+                    status(f"Downloading {kind} model (one-time, 3-4 GB): {got / 1e9:.2f} GB so far...")
+
+        threading.Thread(target=report_download, daemon=True).start()
+        try:
+            self.model = Model.from_pretrained(device=device)
+        finally:
+            loading.set()
+        status(f"Loaded {kind} model on {device.upper()}.")
         self.kind, self.default_conds = kind, self.model.conds  # built-in voice, restored when no reference is set
         return self.model
 
-    def render(self, kind, text, ref, lang, exaggeration, cfg_weight, temperature, seed, out_path, status):
+    def render(self, kind, segments, lang, exaggeration, cfg_weight, temperature, seed, out_path, status):
+        """segments: [(voice sample path or None for the built-in voice, text)], spoken in order."""
         import numpy as np
         import soundfile as sf
         import torch
@@ -100,13 +192,16 @@ class Engine:
         model = self.load(kind, status)
         if seed:
             torch.manual_seed(seed)
-        if ref:
-            status("Analysing voice reference...")
-            model.prepare_conditionals(ref, exaggeration=exaggeration)
-        elif self.default_conds is None:
-            raise RuntimeError("This model has no built-in voice. Record or import a voice reference.")
-        else:
-            model.conds = self.default_conds
+        conds = {None: self.default_conds}  # each voice is analysed once per render
+
+        def use_voice(ref):
+            if ref not in conds:
+                status(f"Analysing voice {Path(ref).stem}...")
+                model.prepare_conditionals(ref, exaggeration=exaggeration)
+                conds[ref] = model.conds
+            if conds[ref] is None:
+                raise RuntimeError("This model has no built-in voice. Record or import a voice first.")
+            model.conds = conds[ref]
 
         kwargs = {"temperature": temperature}
         if kind != "turbo":  # Turbo ignores these (and logs a warning if they're set)
@@ -115,11 +210,17 @@ class Engine:
         if kind == "multilingual":
             kwargs["language_id"] = lang
 
-        chunks = chunk_text(text, CJK_CHUNK_CHARS if kind == "multilingual" and lang in ("zh", "ja", "ko") else CHUNK_CHARS)
+        limit = CJK_CHUNK_CHARS if kind == "multilingual" and lang in ("zh", "ja", "ko") else CHUNK_CHARS
+        if kind != "turbo":  # only Turbo knows the sound tags; other models would read "[laugh]" out as a word
+            segments = [(ref, strip_tags(text)) for ref, text in segments]
+        chunks = [(ref, chunk) for ref, text in segments for chunk in chunk_text(text, limit)]
+        if not chunks:
+            raise RuntimeError("There's nothing to say: the text only has sound tags, which this model doesn't use.")
         gap = np.zeros(int(model.sr * GAP_SECONDS), dtype=np.float32)
         parts = []
-        for i, chunk in enumerate(chunks, 1):
-            status(f"Rendering chunk {i}/{len(chunks)}...")
+        for i, (ref, chunk) in enumerate(chunks, 1):
+            use_voice(ref)
+            status(f"Rendering chunk {i}/{len(chunks)}" + (f" ({Path(ref).stem})" if ref else "") + "...")
             try:
                 wav = model.generate(chunk, **kwargs).squeeze(0).detach().cpu().numpy().astype(np.float32)
             finally:
@@ -134,9 +235,9 @@ class App:
     def __init__(self, root):
         self.root = root
         self.engine = Engine()
-        self.ref = None
         self.output = None
         self.buttons = []
+        self.busy = False
 
         root.title("Lyrebird")
         root.minsize(620, 560)
@@ -144,20 +245,30 @@ class App:
         root.rowconfigure(1, weight=1)
         pad = {"padx": 8, "pady": 4}
 
-        # Voice reference
-        voice = ttk.LabelFrame(root, text="1. Voice to clone (optional, 5-20 s of clean speech)")
+        # Voice library + microphone
+        voice = ttk.LabelFrame(root, text="1. Voice")
         voice.grid(row=0, column=0, sticky="ew", **pad)
-        voice.columnconfigure(4, weight=1)
-        self._button(voice, f"Record ({RECORD_SECONDS}s)", self.record).grid(row=0, column=0, **pad)
-        self._button(voice, "Import audio...", self.import_audio).grid(row=0, column=1, **pad)
+        voice.columnconfigure(1, weight=1)
+        ttk.Label(voice, text="Voice").grid(row=0, column=0, sticky="w", **pad)
+        self.voice_var = tk.StringVar(value=BUILTIN_VOICE)
+        self.voice_box = ttk.Combobox(voice, textvariable=self.voice_var, state="readonly", postcommand=self.refresh_voices)
+        self.voice_box.grid(row=0, column=1, sticky="ew", **pad)
         ttk.Button(voice, text="Play", command=lambda: self.play(self.ref)).grid(row=0, column=2, **pad)
-        ttk.Button(voice, text="Clear", command=lambda: self.set_ref(None)).grid(row=0, column=3, **pad)
-        self.ref_label = ttk.Label(voice, foreground="gray")
-        self.ref_label.grid(row=1, column=0, columnspan=5, sticky="w", **pad)
-        self.set_ref(None)
+        ttk.Button(voice, text="Folder", command=lambda: os.startfile(voices_dir())).grid(row=0, column=3, **pad)
+        ttk.Label(voice, text="Microphone").grid(row=1, column=0, sticky="w", **pad)
+        self.mic_var = tk.StringVar(value=DEFAULT_MIC)
+        self.mic_box = ttk.Combobox(voice, textvariable=self.mic_var, state="readonly", postcommand=self.refresh_mics)
+        self.mic_box.grid(row=1, column=1, sticky="ew", **pad)
+        self._button(voice, f"Record ({RECORD_SECONDS}s)", self.record).grid(row=1, column=2, **pad)
+        self._button(voice, "Import...", self.import_audio).grid(row=1, column=3, **pad)
+        ttk.Label(voice, foreground="gray", text="Record or import 5-20 s of clean speech to add a voice. "
+                  "Voices are saved by name and stay in the list.").grid(row=2, column=0, columnspan=4, sticky="w", **pad)
+        self.mics = {}
+        self.refresh_voices()
+        self.refresh_mics(reinit=False)
 
         # Text
-        text_frame = ttk.LabelFrame(root, text="2. Text to speak")
+        text_frame = ttk.LabelFrame(root, text='2. Text to speak (dialogue: start a line with a voice name, e.g. "Alice: Hi!")')
         text_frame.grid(row=1, column=0, sticky="nsew", **pad)
         text_frame.columnconfigure(0, weight=1)
         text_frame.rowconfigure(0, weight=1)
@@ -166,6 +277,20 @@ class App:
         scroll = ttk.Scrollbar(text_frame, command=self.text.yview)
         scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 8))
         self.text.configure(yscrollcommand=scroll.set)
+        self.text.tag_configure("speaker", font=("Segoe UI", 10, "bold"), foreground="#1a5fb4")
+        self.text.tag_configure("tag", background="#d7ebff", foreground="#0b4f8a")
+        self.text.tag_configure("tag_off", background="#fff0c2", foreground="#8a5a00")
+        self.text.tag_configure("bad_tag", underline=True, foreground="#c01c28")
+        self.text.bind("<<Modified>>", self.on_text_modified)
+        tags = ttk.Frame(text_frame)
+        tags.grid(row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
+        insert = ttk.Menubutton(tags, text="Insert tag")
+        insert["menu"] = menu = tk.Menu(insert, tearoff=False)
+        for tag in TURBO_TAGS:
+            menu.add_command(label=tag, command=lambda t=tag: (self.text.insert("insert", t), self.text.focus_set()))
+        insert.pack(side="left")
+        ttk.Label(tags, foreground="gray", text="Tags like [laugh] only work with the Turbo model "
+                  "(amber = ignored by this model, red = unknown tag).").pack(side="left", padx=8)
 
         # Options
         opts = ttk.LabelFrame(root, text="3. Options")
@@ -201,7 +326,7 @@ class App:
         self._button(row, "Render", self.render).pack(side="left", **pad)
         ttk.Button(row, text="Play output", command=lambda: self.play(self.output)).pack(side="left", **pad)
         ttk.Button(row, text="Open folder", command=self.open_folder).pack(side="left", **pad)
-        self.progress = ttk.Progressbar(out, mode="indeterminate")
+        self.progress = ttk.Progressbar(out, mode="determinate")
         self.progress.grid(row=2, column=0, columnspan=3, sticky="ew", **pad)
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(out, textvariable=self.status, wraplength=580).grid(row=3, column=0, columnspan=3, sticky="w", **pad)
@@ -231,10 +356,67 @@ class App:
         for var in (self.exaggeration, self.cfg_weight):
             var.scale.state(["disabled"] if kind == "turbo" else ["!disabled"])
         self.lang_box.state(["!disabled"] if kind == "multilingual" else ["disabled"])
+        self.highlight()
 
-    def set_ref(self, path):
-        self.ref = path
-        self.ref_label.configure(text=f"Reference: {path}" if path else "No reference - the model's built-in voice will be used.")
+    def on_text_modified(self, _event):
+        if self.text.edit_modified():  # clearing the flag re-fires <<Modified>>; skip that second call
+            self.text.edit_modified(False)
+            self.highlight()
+
+    def highlight(self):
+        """Colour Turbo tags and dialogue speaker names in the text box."""
+        if not hasattr(self, "text"):  # called while the window is still being built
+            return
+        for style in ("speaker", "tag", "tag_off", "bad_tag"):
+            self.text.tag_remove(style, "1.0", "end")
+        known = "tag" if MODELS[self.model_var.get()] == "turbo" else "tag_off"
+        names = {n.lower() for n in [*self.voices, BUILTIN_NAME]}
+        for ln, line in enumerate(self.text.get("1.0", "end-1c").split("\n"), 1):  # "line.col" indices are cheap for Tk
+            for m in re.finditer(r"\[[^\[\]]{1,30}\]", line):
+                self.text.tag_add(known if m.group() in TURBO_TAGS else "bad_tag", f"{ln}.{m.start()}", f"{ln}.{m.end()}")
+            m = re.match(r"\s*([^:]{1,60}):", line)  # same rule as split_speakers
+            if m and m.group(1).strip().lower() in names:
+                self.text.tag_add("speaker", f"{ln}.{m.start(1)}", f"{ln}.{m.end()}")
+
+    @property
+    def ref(self):
+        """Path of the selected voice sample, or None for the model's built-in voice."""
+        return self.voices.get(self.voice_var.get())
+
+    def refresh_voices(self, select=None):
+        self.voices = {p.stem: str(p) for p in sorted(voices_dir().iterdir()) if p.suffix.lower() in AUDIO_EXTS}
+        self.voice_box.configure(values=[BUILTIN_VOICE, *self.voices])
+        if select or self.voice_var.get() not in self.voices:
+            self.voice_var.set(select or BUILTIN_VOICE)
+        self.highlight()  # speaker names may have changed
+
+    def refresh_mics(self, reinit=True):
+        """List microphones, re-scanning so newly plugged-in devices show up."""
+        if self.busy:  # re-initialising PortAudio mid-recording would kill the recording
+            return
+        try:
+            import sounddevice as sd
+
+            if reinit:
+                sd._terminate()
+                sd._initialize()
+            self.mics = input_devices()
+        except Exception as e:  # no audio subsystem: still usable with imported voices
+            print(f"Microphone scan failed: {e}")
+            self.mics = {}
+        self.mic_box.configure(values=[DEFAULT_MIC, *self.mics])
+        if self.mic_var.get() not in self.mics:
+            self.mic_var.set(DEFAULT_MIC)
+
+    def ask_voice_path(self, default, suffix):
+        """Ask for a voice name; returns its path in the voice library, or None if cancelled."""
+        name = simpledialog.askstring("Lyrebird", "Name this voice:", initialvalue=default, parent=self.root)
+        name = re.sub(r'[<>:"/\\|?*]', "_", (name or "").strip()).strip(". ")
+        if not name:
+            return None
+        if voice_files(name) and not messagebox.askyesno("Lyrebird", f'Replace the existing voice "{name}"?'):
+            return None
+        return voices_dir() / f"{name}{suffix}"
 
     # --- background work -----------------------------------------------------
     def ui(self, fn, *args):
@@ -242,8 +424,10 @@ class App:
         self.root.after(0, fn, *args)
 
     def run_bg(self, work):
+        self.busy = True
         for b in self.buttons:
             b.state(["disabled"])
+        self.progress.configure(mode="indeterminate")
         self.progress.start(12)
 
         def target():
@@ -260,7 +444,9 @@ class App:
         threading.Thread(target=target, daemon=True).start()
 
     def done(self):
+        self.busy = False
         self.progress.stop()
+        self.progress.configure(mode="determinate", value=0)  # an idle indeterminate bar leaves a stray block
         for b in self.buttons:
             b.state(["!disabled"])
 
@@ -271,28 +457,42 @@ class App:
 
     # --- actions -------------------------------------------------------------
     def record(self):
-        path = self.out_folder() / f"reference_{stamp()}.wav"
+        path = self.ask_voice_path(f"My voice {datetime.now():%Y-%m-%d %H%M}", ".wav")
+        if not path:
+            return
+        device = self.mics.get(self.mic_var.get())  # None = Windows default input
 
         def work():
+            import numpy as np
             import sounddevice as sd
             import soundfile as sf
 
-            sr = int(sd.query_devices(kind="input")["default_samplerate"])
-            audio = sd.rec(RECORD_SECONDS * sr, samplerate=sr, channels=1, dtype="float32")
+            info = sd.query_devices(device, "input")
+            sr = int(info["default_samplerate"])  # the device's native format; WASAPI rejects anything else
+            audio = sd.rec(RECORD_SECONDS * sr, samplerate=sr, channels=info["max_input_channels"],
+                           device=device, dtype="float32")
             for left in range(RECORD_SECONDS, 0, -1):
-                self.ui(self.status.set, f"Recording... {left}s left - speak now.")
+                self.ui(self.status.set, f"Recording from {info['name']}... {left}s left - speak now.")
                 time.sleep(1)
             sd.wait()
-            sf.write(path, audio, sr)
-            self.ui(self.set_ref, str(path))
-            self.ui(self.status.set, f"Recorded {path.name}.")
+            sf.write(path, audio[:, np.abs(audio).max(axis=0).argmax()], sr)  # keep the loudest channel
+            drop_older_versions(path)
+            self.ui(self.refresh_voices, path.stem)
+            self.ui(self.status.set, f'Saved voice "{path.stem}".')
 
         self.run_bg(work)
 
     def import_audio(self):
-        path = filedialog.askopenfilename(title="Choose a voice sample", filetypes=AUDIO_TYPES)
+        src = filedialog.askopenfilename(title="Choose a voice sample", filetypes=AUDIO_TYPES)
+        if not src:
+            return
+        path = self.ask_voice_path(Path(src).stem, Path(src).suffix.lower())
         if path:
-            self.set_ref(path)
+            if not (path.exists() and os.path.samefile(src, path)):  # re-importing a library file is a no-op
+                shutil.copyfile(src, path)
+            drop_older_versions(path)
+            self.refresh_voices(path.stem)
+            self.status.set(f'Added voice "{path.stem}".')
 
     def browse_out(self):
         folder = filedialog.askdirectory(initialdir=self.out_dir.get())
@@ -309,8 +509,13 @@ class App:
             seed = int(self.seed.get())
         except (tk.TclError, ValueError):
             seed = 0
+        voices = {**self.voices, BUILTIN_NAME: None}
+        segments = [(voices[who] if who else self.ref, part) for who, part in split_speakers(text, voices)]
+        if not segments:  # e.g. only "Alice:" lines so far; don't load a model for nothing
+            messagebox.showwarning("Lyrebird", "Type some text to speak first.")
+            return
         args = dict(
-            kind=kind, text=text, ref=self.ref, lang=self.lang_var.get().split(" ")[0],
+            kind=kind, segments=segments, lang=self.lang_var.get().split(" ")[0],
             exaggeration=self.exaggeration.get(), cfg_weight=self.cfg_weight.get(),
             temperature=self.temperature.get(), seed=seed,
             out_path=self.out_folder() / f"lyrebird_{stamp()}.wav",

@@ -1,0 +1,165 @@
+# How to use Lyrebird
+
+This guide covers everything from first launch to a finished dialogue.
+For what each option does in detail, see [Options in the README](README.md#options).
+
+- [1. First launch: one-time setup](#1-first-launch-one-time-setup)
+- [2. The main window](#2-the-main-window)
+- [3. Add a voice](#3-add-a-voice)
+- [4. Choose a microphone](#4-choose-a-microphone)
+- [5. Type what to say](#5-type-what-to-say)
+- [6. Write a dialogue with several voices](#6-write-a-dialogue-with-several-voices)
+- [7. Add laughs, sighs and other sounds (Turbo)](#7-add-laughs-sighs-and-other-sounds-turbo)
+- [8. Render](#8-render)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## 1. First launch: one-time setup
+
+Unzip `Lyrebird-win64.zip` anywhere and run `Lyrebird\Lyrebird.exe`.
+
+The download is small (about 33 MB) because the voice engine isn't included. On the first launch, Lyrebird downloads Python, PyTorch and Chatterbox into `%LOCALAPPDATA%\Lyrebird`:
+
+![First-run setup window](docs/images/setup.png)
+
+- **The step line** says what is happening: Python (step 1), PyTorch and libraries (step 2, the big one), then Chatterbox (step 3).
+- **The grey line under the bar** is the installer's latest message.
+- **The bottom line** shows how much is on disk so far and how long it has taken. Packages are unpacked as they arrive, so this number ends up about twice the download size.
+
+Expect about a 3 GB download with an NVIDIA GPU, or much less without one. Setup needs about 6 GB of free disk space. Lyrebird picks the right PyTorch build for your PC automatically. On a fast connection it takes a couple of minutes. When it's done, the main window opens by itself. Later launches skip this step.
+
+If you close the window or lose your connection, start Lyrebird again. Setup picks up where it stopped.
+
+> **Windows SmartScreen:** the exe isn't code-signed yet, so Windows may show "Windows protected your PC". Click **More info → Run anyway**.
+
+## 2. The main window
+
+![Main window](docs/images/main.png)
+
+The window is laid out top to bottom in the order you use it:
+
+1. **Voice**: who should speak, and the tools to record or import new voices.
+2. **Text to speak**: what they should say.
+3. **Options**: which model to use and how expressive it should be.
+4. **Render**: where the file goes, the Render button, and progress.
+
+Just want to hear it work? Type a sentence and click **Render**. The model's built-in voice is used.
+
+## 3. Add a voice
+
+Lyrebird clones a voice from a short sample. Voices are saved by name in `Documents\Lyrebird\voices` and stay in the **Voice** list for next time:
+
+![Voice list](docs/images/voices.png)
+
+There are two ways to add a voice:
+
+- **Record (10s):** click it, give the voice a name, then talk for 10 seconds. The status line counts down.
+- **Import...:** pick a `.wav`, `.mp3`, `.flac` or `.ogg` file, then give it a name.
+
+![Naming a voice](docs/images/name-voice.png)
+
+A new voice is selected automatically. **Play** plays the selected voice's sample. **Folder** opens the voices folder, where you can rename or delete voices; the list updates the next time you open it.
+
+**For a good clone:**
+
+- Use 5 to 20 seconds of one person talking naturally.
+- Avoid music, background noise, other voices and echoey rooms.
+- When recording, start talking right away and keep going until the countdown ends.
+- The Turbo model needs a sample longer than 5 seconds.
+
+Only clone voices you have permission to use. See [Responsible use](README.md#responsible-use).
+
+## 4. Choose a microphone
+
+The **Microphone** list shows every input device Windows knows about. **(Windows default microphone)** uses whatever is set as default in Windows Sound settings.
+
+![Microphone list](docs/images/microphones.png)
+
+If you plug in a mic while Lyrebird is open, it appears the next time you open the list. Lyrebird records at the device's own sample rate. If the device has several channels, it keeps the loudest one.
+
+## 5. Type what to say
+
+Type or paste any amount of text into **Text to speak**. Long text is split at sentence ends and line breaks into short chunks, and the chunks are joined with a short pause, so a whole article works.
+
+To speak in another language, choose **Multilingual (23 languages)** as the model and pick the **Language** of your text.
+
+## 6. Write a dialogue with several voices
+
+Start a line with a saved voice's name and a colon to switch speaker:
+
+```
+Alice: Did you hear? Lyrebird can do dialogue now. [laugh]
+Bob: [sigh] Of course it can. What's next, singing?
+Alice: Only if you ask nicely.
+Built-in: And so the two voices argued late into the night.
+```
+
+![Dialogue script](docs/images/dialogue.png)
+
+- Names that Lyrebird recognises turn **bold blue**, so you can see the script is understood.
+- Names match your voice list, ignoring capitals. `Built-in:` uses the model's own voice.
+- A name that isn't a saved voice is read out as normal text. That way, lines like `Note: remember the milk` are safe.
+- Lines without a name continue with the current speaker.
+- Text before the first name uses the voice selected in the **Voice** list.
+- Each voice is analysed once per render, so long dialogues don't slow down with every speaker change.
+
+## 7. Add laughs, sighs and other sounds (Turbo)
+
+With the **Turbo (English, fast)** model, you can put sound tags in the text, like `[laugh]`, `[sigh]` or `[whispering]`. Use **Insert tag** to add one at the cursor:
+
+![Insert tag menu](docs/images/insert-tag.png)
+
+Tags are coloured as you type:
+
+| Colour | Meaning |
+|---|---|
+| Blue | A tag Turbo understands. |
+| Amber | A real tag, but only Turbo supports tags. With the selected model, Lyrebird leaves it out when rendering, so it isn't read aloud. |
+| Red underline | Not a known tag. Check the spelling: `[laughs]` should be `[laugh]`. |
+
+Here is the same script with the **Standard** model selected, so the tags turn amber:
+
+![Tags with a non-Turbo model](docs/images/tags-other-model.png)
+
+All 19 tags: `[laugh]` `[chuckle]` `[sigh]` `[gasp]` `[cough]` `[clear throat]` `[sniff]` `[groan]` `[shush]` `[whispering]` `[angry]` `[happy]` `[sarcastic]` `[surprised]` `[fear]` `[crying]` `[dramatic]` `[narration]` `[advertisement]`
+
+## 8. Render
+
+Click **Render**. The progress bar moves, and the status line says what's happening:
+
+![Rendering in progress](docs/images/rendering.png)
+
+- **Downloading … GB so far** appears only the first time you use each model. Each model is a one-time 3 to 4 GB download.
+- **Analysing voice …** means Lyrebird is reading a voice sample.
+- **Rendering chunk 2/4 (Bob)** shows which part is being spoken and by whom.
+
+When it finishes, the status line shows where the file was saved:
+
+![Render finished](docs/images/done.png)
+
+Then:
+
+- **Play output** plays the result.
+- **Open folder** opens the output folder in Explorer.
+- Every render gets its own file, `lyrebird_<date>_<time>.wav`, so nothing is overwritten.
+
+**If a take sounds off**, click Render again for a new variation, or try these:
+
+- Lower **Temperature** for steadier speech.
+- Raise **Exaggeration** for more drama. It works with Standard and Multilingual.
+- Lower **CFG / pace** for slower delivery.
+- Set a **Seed** other than 0 to make a take you like repeatable.
+
+## Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| Setup failed | Check your internet connection and start Lyrebird again. Setup resumes. The details are in `%LOCALAPPDATA%\Lyrebird\setup.log`. |
+| "Lyrebird failed to start" | See `%LOCALAPPDATA%\Lyrebird\lyrebird.log`. To force a fresh setup, delete `%LOCALAPPDATA%\Lyrebird\env`. |
+| Rendering is very slow | The status line says `on CPU` when the model loads: no usable NVIDIA GPU was found. Updating the NVIDIA driver and deleting `%LOCALAPPDATA%\Lyrebird\env` makes setup pick the GPU build. |
+| A microphone is missing | Open the Microphone list again to rescan. Check that Windows lists the mic under Settings → System → Sound → Input. |
+| The recording is silent | Choose the right microphone, and check Windows' microphone privacy setting: Settings → Privacy & security → Microphone → "Let desktop apps access your microphone". |
+| "Audio prompt must be longer than 5 seconds" | Turbo needs a longer sample. Record again, or import a longer clip. |
+| A voice sounds wrong in dialogue | Make sure the name before the colon turned bold blue. If it didn't, it doesn't match a saved voice exactly. |
+| Anything else | Please open an issue and attach `%LOCALAPPDATA%\Lyrebird\lyrebird.log`. |

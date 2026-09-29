@@ -1,4 +1,4 @@
-# Builds dist\Lyrebird\Lyrebird.exe
+# Builds the release: dist\Lyrebird-win64.zip (a small launcher; PyTorch and the models download on first run).
 #   powershell -ExecutionPolicy Bypass -File build.ps1
 # Needs uv (https://docs.astral.sh/uv/). uv also downloads a Python 3.12 that includes tkinter,
 # which some python.org installs leave out.
@@ -11,20 +11,19 @@ function Exec($exe) {
 }
 
 if (-not (Test-Path .venv)) { Exec uv venv --managed-python --python 3.12 .venv }
-Exec uv pip install --python .venv -r requirements.txt --index-strategy unsafe-best-match
-Exec uv pip install --python .venv --no-deps chatterbox-tts==0.1.7
-Exec uv pip install --python .venv pyinstaller
+# The uv package ships uv.exe, which the launcher bundles to install everything on the user's PC.
+Exec uv pip install --python .venv pyinstaller uv==0.11.24
 Exec .venv\Scripts\python.exe test_lyrebird.py
 
+# Build under %TEMP%: OneDrive/Dropbox-synced folders lock freshly written files mid-build.
+$out = Join-Path $env:TEMP "lyrebird-build"
 Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebird `
-    --collect-data perth `
-    --collect-data chatterbox `
-    --collect-data s3tokenizer `
-    --collect-data pykakasi `
-    --collect-data spacy_pkuseg `
-    --copy-metadata requests `
-    --copy-metadata pykakasi `
-    --collect-submodules srsly `
-    lyrebird.py
+    --distpath "$out\dist" --workpath "$out\build" --specpath $out `
+    --add-binary "$PSScriptRoot\.venv\Scripts\uv.exe;." `
+    --add-data "$PSScriptRoot\lyrebird.py;." `
+    --add-data "$PSScriptRoot\requirements.txt;." `
+    launcher.py
 
-Write-Host "`nBuilt dist\Lyrebird\Lyrebird.exe"
+New-Item -ItemType Directory -Force dist | Out-Null
+Compress-Archive -Path "$out\dist\Lyrebird" -DestinationPath dist\Lyrebird-win64.zip -Force
+Write-Host "`nBuilt dist\Lyrebird-win64.zip (unzipped app: $out\dist\Lyrebird\Lyrebird.exe)"
