@@ -1,0 +1,119 @@
+/* Lyrebird brand tokens — generated from tokens.json. Light is default; dark via prefers-color-scheme or [data-theme="dark"]. */
+
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/bricolage-grotesque-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/bricolage-grotesque-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("fonts/atkinson-hyperlegible-next-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("fonts/atkinson-hyperlegible-next-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("fonts/atkinson-hyperlegible-next-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "IBM Plex Mono"; src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+
+@font-face { font-family: "IBM Plex Mono"; src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+
+:root, [data-theme="light"] {
+  --ground: #f2f3ee;
+  --surface: #fbfbf8;
+  --line: #d9ddd4;
+  --ink: #18201c;
+  --ink-muted: #56615a;
+  --plume: #a8471f;
+  --plume-soft: #f6e3d6;
+  --on-plume: #fffaf5;
+  --fern: #1f3d31;
+  --lyre: #e2b04a;
+  --speaker: #1a5fb4;
+  --tag: #0b4f8a;
+  --tag-bg: #d7ebff;
+  --tag-off: #8a5a00;
+  --tag-off-bg: #fff0c2;
+  --tag-bad: #c01c28;
+  --shadow-panel: 0 1px 2px rgba(24,32,28,0.08), 0 4px 16px rgba(24,32,28,0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #111613;
+    --surface: #19201c;
+    --line: #2c3631;
+    --ink: #e7ece6;
+    --ink-muted: #9aa79f;
+    --plume: #f0a36e;
+    --plume-soft: #3a2216;
+    --on-plume: #1b0f08;
+    --fern: #2c5444;
+    --lyre: #e2b04a;
+    --speaker: #8fb8f0;
+    --tag: #b5d6ff;
+    --tag-bg: #13314f;
+    --tag-off: #f2cf73;
+    --tag-off-bg: #3d2e05;
+    --tag-bad: #ff7b82;
+    --shadow-panel: 0 1px 2px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.35);
+    color-scheme: dark;
+  }
+}
+
+[data-theme="dark"] {
+  --ground: #111613;
+  --surface: #19201c;
+  --line: #2c3631;
+  --ink: #e7ece6;
+  --ink-muted: #9aa79f;
+  --plume: #f0a36e;
+  --plume-soft: #3a2216;
+  --on-plume: #1b0f08;
+  --fern: #2c5444;
+  --lyre: #e2b04a;
+  --speaker: #8fb8f0;
+  --tag: #b5d6ff;
+  --tag-bg: #13314f;
+  --tag-off: #f2cf73;
+  --tag-off-bg: #3d2e05;
+  --tag-bad: #ff7b82;
+  --shadow-panel: 0 1px 2px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.35);
+  color-scheme: dark;
+}
+
+:root {
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+  --font-app: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+}
+
+.display-xl { font-family: var(--font-display); font-size: 64px; line-height: 60px; font-weight: 800; letter-spacing: -0.02em; }}
+
+.display { font-family: var(--font-display); font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.015em; }}
+
+.heading { font-family: var(--font-display); font-size: 24px; line-height: 30px; font-weight: 700; }}
+
+.subhead { font-family: var(--font-display); font-size: 18px; line-height: 24px; font-weight: 600; }}
+
+.body { font-family: var(--font-body); font-size: 16px; line-height: 25px; font-weight: 400; }}
+
+.body-sm { font-family: var(--font-body); font-size: 14px; line-height: 21px; font-weight: 400; }}
+
+.label { font-family: var(--font-body); font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }}
+
+.script { font-family: var(--font-mono); font-size: 15px; line-height: 24px; font-weight: 400; }}
+
+.meta { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500; }}
+
+.app-ui { font-family: var(--font-app); font-size: 13px; line-height: 18px; font-weight: 400; }}

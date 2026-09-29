@@ -1,0 +1,48 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Lyrebird</title>
+<style>
+html,body{margin:0;height:100%}
+body{background:var(--ground);color:var(--ink);font-family:var(--font-display);overflow:hidden}
+.cover{position:relative;height:288px;overflow:hidden}
+.art{position:absolute;top:0;left:480px;width:480px;height:288px;overflow:hidden}
+.art svg{display:block;width:480px;height:288px}
+.plume{fill:var(--plume)} .soft{fill:var(--plume-soft)} .fern{fill:var(--fern)} .lyre{fill:var(--lyre)}
+.barb{fill:var(--lyre)} .barb-p{fill:var(--plume)}
+.words{position:absolute;left:32px;bottom:32px;max-width:440px}
+.name{margin:0;font-size:88px;line-height:.92;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.tag{margin:8px 0 0 4px;font-family:var(--font-body);font-size:14px;line-height:20px;color:var(--ink-muted)}
+</style></head><body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      plume 144x232 slab bled off the top (the brand hue, largest) . fern 288x240 bled off the right (icon tile) . lyre 48x24 once . plume-soft 64x96 relief behind the ground barbs  (~40% of 960x288)
+  arrangement one tall plume slab with the fern tile beside it, bottoms aligned space-6 above the edge, space-4 gutter
+  pattern     barbs, from the mark: space-2-tall pills at a space-4 pitch whose lengths trace a waveform, lyre on fern; four plume barbs on plume-soft
+  scales      sides in space-2 multiples; gutter space-4; pitch space-4; tile corner radius-lg; barb rx half of space-2
+-->
+<rect class="soft" x="0" y="152" width="112" height="112" rx="8"/>
+<rect class="barb-p" x="16" y="168" width="40" height="8" rx="4"/>
+<rect class="barb-p" x="16" y="184" width="72" height="8" rx="4"/>
+<rect class="barb-p" x="16" y="200" width="48" height="8" rx="4"/>
+<rect class="barb-p" x="16" y="216" width="24" height="8" rx="4"/>
+<rect class="plume" x="128" y="-16" width="144" height="280" rx="14"/>
+<rect class="fern" x="288" y="24" width="208" height="240" rx="14"/>
+<rect class="lyre" x="128" y="272" width="48" height="24" rx="4"/>
+<rect class="barb" x="304" y="48" width="24" height="8" rx="4"/>
+<rect class="barb" x="304" y="64" width="56" height="8" rx="4"/>
+<rect class="barb" x="304" y="80" width="96" height="8" rx="4"/>
+<rect class="barb" x="304" y="96" width="64" height="8" rx="4"/>
+<rect class="barb" x="304" y="112" width="128" height="8" rx="4"/>
+<rect class="barb" x="304" y="128" width="160" height="8" rx="4"/>
+<rect class="barb" x="304" y="144" width="112" height="8" rx="4"/>
+<rect class="barb" x="304" y="160" width="144" height="8" rx="4"/>
+<rect class="barb" x="304" y="176" width="80" height="8" rx="4"/>
+<rect class="barb" x="304" y="192" width="112" height="8" rx="4"/>
+<rect class="barb" x="304" y="208" width="56" height="8" rx="4"/>
+<rect class="barb" x="304" y="224" width="32" height="8" rx="4"/>
+</svg>
+</div>
+<div class="words"><h1 class="name">Lyrebird</h1><p class="tag">Hear it once. Say it in any voice.</p></div>
+</div></body></html>

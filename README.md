@@ -164,5 +164,6 @@ Only clone voices you have permission to use. Every file Chatterbox generates ca
 
 - **Lyrebird:** MIT License, see [LICENSE](LICENSE).
 - **[Chatterbox](https://github.com/resemble-ai/chatterbox):** TTS models and code © Resemble AI, MIT License.
+- **Brand kit** (`brand/`, see its [README](brand/README.md)): logo and icon are part of Lyrebird (MIT). The fonts in `brand/fonts/` (Bricolage Grotesque, Atkinson Hyperlegible Next, IBM Plex Mono) are under the SIL Open Font License 1.1; the license texts are next to them.
 - **The release zip** contains the Lyrebird launcher, a Python runtime (PSF License), Tcl/Tk (BSD-style) and [uv](https://github.com/astral-sh/uv) (MIT/Apache-2.0).
 - **Packages downloaded during setup** come from PyPI and the PyTorch index under their own licenses, for example PyTorch (BSD-3-Clause) and [pykakasi](https://codeberg.org/miurahr/pykakasi) (GPL-3.0-or-later). Setup installs them on your PC; the release zip doesn't contain them.
