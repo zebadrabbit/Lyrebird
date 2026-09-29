@@ -153,6 +153,7 @@ test_lyrebird.py   tests for the text chunker and dialogue parser
 requirements.txt   runtime dependencies installed by the launcher
 build.ps1          builds dist\Lyrebird-win64.zip
 HOWTO.md           usage guide with screenshots (docs/images/)
+examples/          dialogue scripts to try (Turbo + sound tags)
 brand/             logo, wordmarks and app icon (lyrebird.ico, SVG, PNG)
 ```
 

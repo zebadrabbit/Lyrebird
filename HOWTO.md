@@ -104,6 +104,12 @@ Built-in: And so the two voices argued late into the night.
 - Text before the first name uses the voice selected in the **Voice** list.
 - Each voice is analysed once per render, so long dialogues don't slow down with every speaker change.
 
+**A longer example:** [examples/juan-and-the-helicopter.txt](examples/juan-and-the-helicopter.txt) is a 17-line story that uses speaker switching and six sound tags. To render it:
+
+1. Save a voice named `Narrator`.
+2. Select the **Turbo** model.
+3. Paste in the script and click **Render**.
+
 ## 7. Add laughs, sighs and other sounds (Turbo)
 
 With the **Turbo (English, fast)** model, you can put sound tags in the text, like `[laugh]`, `[sigh]` or `[whispering]`. Use **Insert tag** to add one at the cursor:

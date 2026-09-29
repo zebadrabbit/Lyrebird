@@ -1,0 +1,17 @@
+Narrator: Tonight's tale concerns one Juan, a brave soul who loaded into WARDOGS with a single dream. [clear throat]
+Narrator: He wanted to fly the helicopter.
+Narrator: He sprinted across the base, leapt into the pilot seat, and reached for the controls. [gasp]
+Narrator: Locked. Blue team only.
+Built-in: Wait, isn't he on blue team?
+Narrator: He was on blue team! [laugh] That was the whole problem!
+Narrator: Juan had been placed on blue team, and blue team had been placed on him, and neither could be removed.
+Narrator: He opened the team menu and clicked red. [sigh] Blue.
+Narrator: He clicked red again. Blue.
+Built-in: Maybe try clicking it harder? [chuckle]
+Narrator: He clicked it harder. Still blue. [groan]
+Narrator: Somehow, the game had decided blue team meant ground crew, forever and always.
+Narrator: So Juan did the only honorable thing and grabbed a jeep instead.
+Narrator: He floored it, launched off a ramp, and flew for exactly one glorious second. [gasp]
+Narrator: Then Juan crashed into a wall! What a goof! [laugh]
+Built-in: Technically, that counts as flying.
+Narrator: [chuckle] And that, friends, is the closest Juan ever came to a helicopter.
