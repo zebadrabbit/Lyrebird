@@ -46,6 +46,8 @@ AUDIO_TYPES = [("Audio", " ".join(f"*{e}" for e in AUDIO_EXTS))]
 BUILTIN_VOICE = "(Built-in voice)"
 BUILTIN_NAME = "Built-in"  # speaker name for the built-in voice in dialogue scripts
 DEFAULT_MIC = "(Windows default microphone)"
+LOOPBACK_PREFIX = "What you hear: "  # records whatever this PC is playing on that output device
+LOOPBACK_RATE = 48000
 # Paralinguistic tags the Turbo model's tokenizer knows (added_tokens.json in ResembleAI/chatterbox-turbo).
 TURBO_TAGS = (
     "[laugh]", "[chuckle]", "[sigh]", "[gasp]", "[cough]", "[clear throat]", "[sniff]", "[groan]", "[shush]",
@@ -92,13 +94,39 @@ def drop_older_versions(path):
             p.unlink()
 
 
-def input_devices():
-    """{name: device index} of microphones. Prefers WASAPI: full device names, one entry per device."""
+def same_input_elsewhere(index):
+    """The same physical microphone under the MME and DirectSound APIs (MME cuts names to 31 characters)."""
+    import sounddevice as sd
+
+    if index is None:
+        return []
+    name = sd.query_devices(index)["name"]
+    apis = {i: a["name"] for i, a in enumerate(sd.query_hostapis())}
+    return [i for api in ("MME", "Windows DirectSound") for i, d in enumerate(sd.query_devices())
+            if i != index and apis[d["hostapi"]] == api and d["max_input_channels"] > 0 and name.startswith(d["name"])]
+
+
+def input_sources():
+    """{label: (kind, id)} of everything Lyrebird can record from.
+
+    Microphones come from sounddevice (WASAPI: full names, one entry per device). "What you hear" (WASAPI
+    loopback of an output device) comes from soundcard: sounddevice's PortAudio build has no loopback, and
+    soundcard can't open some microphones (e.g. Bluetooth hands-free ones), so each library does what it's good at.
+    """
     import sounddevice as sd
 
     apis = sd.query_hostapis()
     api = next((a for a in apis if "WASAPI" in a["name"]), apis[sd.default.hostapi])
-    return {sd.query_devices(i)["name"]: i for i in api["devices"] if sd.query_devices(i)["max_input_channels"] > 0}
+    sources = {sd.query_devices(i)["name"]: ("mic", i) for i in api["devices"] if sd.query_devices(i)["max_input_channels"] > 0}
+    try:
+        import soundcard as sc
+
+        default = sc.default_speaker().id
+        for speaker in sorted(sc.all_speakers(), key=lambda s: s.id != default):  # default output first
+            sources[LOOPBACK_PREFIX + speaker.name] = ("loopback", speaker.id)
+    except Exception as e:  # loopback is optional; microphones still work
+        print(f"Loopback scan failed: {e}")
+    return sources
 
 
 def dir_size(path):
@@ -245,7 +273,7 @@ class App:
         root.rowconfigure(1, weight=1)
         pad = {"padx": 8, "pady": 4}
 
-        # Voice library + microphone
+        # Voice library + recording source
         voice = ttk.LabelFrame(root, text="1. Voice")
         voice.grid(row=0, column=0, sticky="ew", **pad)
         voice.columnconfigure(1, weight=1)
@@ -253,19 +281,21 @@ class App:
         self.voice_var = tk.StringVar(value=BUILTIN_VOICE)
         self.voice_box = ttk.Combobox(voice, textvariable=self.voice_var, state="readonly", postcommand=self.refresh_voices)
         self.voice_box.grid(row=0, column=1, sticky="ew", **pad)
-        ttk.Button(voice, text="Play", command=lambda: self.play(self.ref)).grid(row=0, column=2, **pad)
+        self.voice_box.bind("<<ComboboxSelected>>", self.sync_play)
+        self.play_voice = ttk.Button(voice, text="Play", command=lambda: self.play(self.ref))
+        self.play_voice.grid(row=0, column=2, **pad)
         ttk.Button(voice, text="Folder", command=lambda: os.startfile(voices_dir())).grid(row=0, column=3, **pad)
-        ttk.Label(voice, text="Microphone").grid(row=1, column=0, sticky="w", **pad)
-        self.mic_var = tk.StringVar(value=DEFAULT_MIC)
-        self.mic_box = ttk.Combobox(voice, textvariable=self.mic_var, state="readonly", postcommand=self.refresh_mics)
-        self.mic_box.grid(row=1, column=1, sticky="ew", **pad)
+        ttk.Label(voice, text="Source").grid(row=1, column=0, sticky="w", **pad)
+        self.source_var = tk.StringVar(value=DEFAULT_MIC)
+        self.source_box = ttk.Combobox(voice, textvariable=self.source_var, state="readonly", postcommand=self.refresh_sources)
+        self.source_box.grid(row=1, column=1, sticky="ew", **pad)
         self._button(voice, f"Record ({RECORD_SECONDS}s)", self.record).grid(row=1, column=2, **pad)
         self._button(voice, "Import...", self.import_audio).grid(row=1, column=3, **pad)
-        ttk.Label(voice, foreground="gray", text="Record or import 5-20 s of clean speech to add a voice. "
-                  "Voices are saved by name and stay in the list.").grid(row=2, column=0, columnspan=4, sticky="w", **pad)
-        self.mics = {}
+        ttk.Label(voice, foreground="gray", text="Record or import 5-20 s of clean speech to add a voice. \"What you "
+                  "hear\" records audio playing on this PC.").grid(row=2, column=0, columnspan=4, sticky="w", **pad)
+        self.sources = {}
         self.refresh_voices()
-        self.refresh_mics(reinit=False)
+        self.refresh_sources(reinit=False)
 
         # Text
         text_frame = ttk.LabelFrame(root, text='2. Text to speak (dialogue: start a line with a voice name, e.g. "Alice: Hi!")')
@@ -324,7 +354,8 @@ class App:
         row = ttk.Frame(out)
         row.grid(row=1, column=0, columnspan=3, sticky="ew")
         self._button(row, "Render", self.render).pack(side="left", **pad)
-        ttk.Button(row, text="Play output", command=lambda: self.play(self.output)).pack(side="left", **pad)
+        self.play_output = ttk.Button(row, text="Play output", command=lambda: self.play(self.output))
+        self.play_output.pack(side="left", **pad)
         ttk.Button(row, text="Open folder", command=self.open_folder).pack(side="left", **pad)
         self.progress = ttk.Progressbar(out, mode="determinate")
         self.progress.grid(row=2, column=0, columnspan=3, sticky="ew", **pad)
@@ -332,6 +363,7 @@ class App:
         ttk.Label(out, textvariable=self.status, wraplength=580).grid(row=3, column=0, columnspan=3, sticky="w", **pad)
 
         self.sync_options()
+        self.sync_play()
 
     # --- widgets -------------------------------------------------------------
     def _button(self, parent, text, command):
@@ -389,9 +421,11 @@ class App:
         if select or self.voice_var.get() not in self.voices:
             self.voice_var.set(select or BUILTIN_VOICE)
         self.highlight()  # speaker names may have changed
+        if hasattr(self, "play_output"):  # not yet built during __init__
+            self.sync_play()
 
-    def refresh_mics(self, reinit=True):
-        """List microphones, re-scanning so newly plugged-in devices show up."""
+    def refresh_sources(self, reinit=True):
+        """List recording sources, re-scanning so newly plugged-in devices show up."""
         if self.busy:  # re-initialising PortAudio mid-recording would kill the recording
             return
         try:
@@ -400,13 +434,18 @@ class App:
             if reinit:
                 sd._terminate()
                 sd._initialize()
-            self.mics = input_devices()
+            self.sources = input_sources()
         except Exception as e:  # no audio subsystem: still usable with imported voices
-            print(f"Microphone scan failed: {e}")
-            self.mics = {}
-        self.mic_box.configure(values=[DEFAULT_MIC, *self.mics])
-        if self.mic_var.get() not in self.mics:
-            self.mic_var.set(DEFAULT_MIC)
+            print(f"Source scan failed: {e}")
+            self.sources = {}
+        self.source_box.configure(values=[DEFAULT_MIC, *self.sources])
+        if self.source_var.get() not in self.sources:
+            self.source_var.set(DEFAULT_MIC)
+
+    def sync_play(self, _event=None):
+        """Play buttons only work when there is something to play."""
+        self.play_voice.state(["!disabled"] if self.ref else ["disabled"])
+        self.play_output.state(["!disabled"] if self.output else ["disabled"])
 
     def ask_voice_path(self, default, suffix):
         """Ask for a voice name; returns its path in the voice library, or None if cancelled."""
@@ -460,22 +499,50 @@ class App:
         path = self.ask_voice_path(f"My voice {datetime.now():%Y-%m-%d %H%M}", ".wav")
         if not path:
             return
-        device = self.mics.get(self.mic_var.get())  # None = Windows default input
+        label = self.source_var.get()
+        kind, device = self.sources.get(label, ("mic", None))  # None = Windows default input
 
         def work():
             import numpy as np
-            import sounddevice as sd
             import soundfile as sf
 
-            info = sd.query_devices(device, "input")
-            sr = int(info["default_samplerate"])  # the device's native format; WASAPI rejects anything else
-            audio = sd.rec(RECORD_SECONDS * sr, samplerate=sr, channels=info["max_input_channels"],
-                           device=device, dtype="float32")
-            for left in range(RECORD_SECONDS, 0, -1):
-                self.ui(self.status.set, f"Recording from {info['name']}... {left}s left - speak now.")
-                time.sleep(1)
-            sd.wait()
-            sf.write(path, audio[:, np.abs(audio).max(axis=0).argmax()], sr)  # keep the loudest channel
+            if kind == "loopback":
+                import soundcard as sc
+
+                ctypes.windll.ole32.CoInitializeEx(None, 0)  # soundcard uses COM, which each thread must initialise
+                try:
+                    source = sc.get_microphone(id=device, include_loopback=True)
+                    sr, chunks = LOOPBACK_RATE, []
+                    with source.recorder(samplerate=sr) as recorder:
+                        for left in range(RECORD_SECONDS, 0, -1):
+                            self.ui(self.status.set, f"Recording {label}... {left}s left - play the voice now.")
+                            chunks.append(recorder.record(numframes=sr))
+                finally:
+                    ctypes.windll.ole32.CoUninitialize()
+                mono = np.concatenate(chunks).mean(axis=1)  # program audio is often stereo: mix it down
+            else:
+                import sounddevice as sd
+
+                for attempt in (device, *same_input_elsewhere(device)):
+                    info = sd.query_devices(attempt, "input")
+                    sr = int(info["default_samplerate"])  # the device's native format; WASAPI rejects anything else
+                    try:
+                        audio = sd.rec(RECORD_SECONDS * sr, samplerate=sr, channels=info["max_input_channels"],
+                                       device=attempt, dtype="float32")
+                        break
+                    except sd.PortAudioError as e:  # WASAPI can refuse a mic MME still opens; try the next API
+                        print(f"Could not open {info['name']} ({attempt}): {e}")
+                else:
+                    raise RuntimeError(f"Couldn't open {label}. Another app may be using it exclusively.")
+                for left in range(RECORD_SECONDS, 0, -1):
+                    self.ui(self.status.set, f"Recording from {info['name']}... {left}s left - speak now.")
+                    time.sleep(1)
+                sd.wait()
+                mono = audio[:, np.abs(audio).max(axis=0).argmax()]  # keep the loudest channel
+            if np.abs(mono).max() < 1e-4:
+                raise RuntimeError(f"The recording from {label} is silent, so the voice wasn't saved. "
+                                   "Check the source, or for 'What you hear' make sure audio is playing.")
+            sf.write(path, mono, sr)
             drop_older_versions(path)
             self.ui(self.refresh_voices, path.stem)
             self.ui(self.status.set, f'Saved voice "{path.stem}".')
@@ -525,6 +592,7 @@ class App:
             start = time.time()
             self.engine.render(**args, status=lambda s: self.ui(self.status.set, s))
             self.output = str(args["out_path"])
+            self.ui(self.sync_play)
             self.ui(self.status.set, f"Saved {self.output} ({time.time() - start:.0f}s).")
 
         self.run_bg(work)

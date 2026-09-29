@@ -6,7 +6,7 @@ For what each option does in detail, see [Options in the README](README.md#optio
 - [1. First launch: one-time setup](#1-first-launch-one-time-setup)
 - [2. The main window](#2-the-main-window)
 - [3. Add a voice](#3-add-a-voice)
-- [4. Choose a microphone](#4-choose-a-microphone)
+- [4. Choose a source](#4-choose-a-source)
 - [5. Type what to say](#5-type-what-to-say)
 - [6. Write a dialogue with several voices](#6-write-a-dialogue-with-several-voices)
 - [7. Add laughs, sighs and other sounds (Turbo)](#7-add-laughs-sighs-and-other-sounds-turbo)
@@ -59,7 +59,7 @@ There are two ways to add a voice:
 
 ![Naming a voice](docs/images/name-voice.png)
 
-A new voice is selected automatically. **Play** plays the selected voice's sample. **Folder** opens the voices folder, where you can rename or delete voices; the list updates the next time you open it.
+A new voice is selected automatically. **Play** plays the selected voice's sample. It's greyed out while **(Built-in voice)** is selected, because there's no sample to play. **Folder** opens the voices folder, where you can rename or delete voices; the list updates the next time you open it.
 
 **For a good clone:**
 
@@ -70,13 +70,16 @@ A new voice is selected automatically. **Play** plays the selected voice's sampl
 
 Only clone voices you have permission to use. See [Responsible use](README.md#responsible-use).
 
-## 4. Choose a microphone
+## 4. Choose a source
 
-The **Microphone** list shows every input device Windows knows about. **(Windows default microphone)** uses whatever is set as default in Windows Sound settings.
+The **Source** list shows what **Record (10s)** records from:
 
-![Microphone list](docs/images/microphones.png)
+- **Microphones:** every input device Windows knows about. **(Windows default microphone)** uses whatever is set as default in Windows Sound settings.
+- **What you hear:** one entry per output device, such as your speakers or headphones. It records whatever the PC is playing on that device, so you can capture a voice from a video or call. Start the audio playing, then click **Record (10s)**. Your default output is listed first.
 
-If you plug in a mic while Lyrebird is open, it appears the next time you open the list. Lyrebird records at the device's own sample rate. If the device has several channels, it keeps the loudest one.
+![Source list](docs/images/microphones.png)
+
+If you plug in a device while Lyrebird is open, it appears the next time you open the list. A recording that comes out silent isn't saved: Lyrebird tells you instead. With "What you hear", that usually means nothing was playing on that output.
 
 ## 5. Type what to say
 
@@ -164,8 +167,9 @@ Then:
 | Setup failed | Check your internet connection and start Lyrebird again. Setup resumes. The details are in `%LOCALAPPDATA%\Lyrebird\setup.log`. |
 | "Lyrebird failed to start" | See `%LOCALAPPDATA%\Lyrebird\lyrebird.log`. To force a fresh setup, delete `%LOCALAPPDATA%\Lyrebird\env`. |
 | Rendering is very slow | The status line says `on CPU` when the model loads: no usable NVIDIA GPU was found. Updating the NVIDIA driver and deleting `%LOCALAPPDATA%\Lyrebird\env` makes setup pick the GPU build. |
-| A microphone is missing | Open the Microphone list again to rescan. Check that Windows lists the mic under Settings → System → Sound → Input. |
-| The recording is silent | Choose the right microphone, and check Windows' microphone privacy setting: Settings → Privacy & security → Microphone → "Let desktop apps access your microphone". |
+| "Couldn't open … Another app may be using it exclusively" | Close apps that might hold the mic (voice chat, games, recording software), or turn off Windows' "Allow applications to take exclusive control of this device" in the mic's Sound Control Panel properties (Advanced tab). |
+| A microphone is missing | Open the **Source** list again to rescan. Check that Windows lists the mic under Settings → System → Sound → Input. |
+| "The recording ... is silent" | For a microphone: choose the right one, and check Windows' microphone privacy setting: Settings → Privacy & security → Microphone → "Let desktop apps access your microphone". For **What you hear**: make sure audio is playing on that output device while you record. |
 | "Audio prompt must be longer than 5 seconds" | Turbo needs a longer sample. Record again, or import a longer clip. |
 | A voice sounds wrong in dialogue | Make sure the name before the colon turned bold blue. If it didn't, it doesn't match a saved voice exactly. |
 | Anything else | Please open an issue and attach `%LOCALAPPDATA%\Lyrebird\lyrebird.log`. |

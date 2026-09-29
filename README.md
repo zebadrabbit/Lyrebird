@@ -29,8 +29,8 @@ Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWT
 
 ## Features
 
-- **Voice library:** record 10 s from any microphone or import wav/mp3/flac/ogg, give it a name, and it stays in the **Voice** list. Voices are stored in `Documents\Lyrebird\voices`.
-- **Microphone picker:** lists every input device. Newly plugged-in mics show up the next time you open the list.
+- **Voice library:** record 10 s from any source or import wav/mp3/flac/ogg, give it a name, and it stays in the **Voice** list. Voices are stored in `Documents\Lyrebird\voices`.
+- **Recording sources:** every microphone, plus **What you hear** for each output device, which records whatever the PC is playing (for example a video of someone who has agreed to be cloned). Newly plugged-in devices show up the next time you open the list.
 - **Multi-speaker dialogue:** start a line with a saved voice's name to switch speaker:
   ```
   Alice: Did you hear the news?
@@ -47,7 +47,7 @@ Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWT
 | Option | Range (default) | Models | Effect |
 |---|---|---|---|
 | **Voice** | saved voices or (Built-in voice) | all | Who speaks. It's also the speaker for any text before the first `Name:` line. |
-| **Microphone** | input devices (Windows default) | all | Used by **Record (10s)**. Records at the device's own sample rate; if the device has several channels, the loudest one is kept. |
+| **Source** | microphones and "What you hear" outputs (Windows default microphone) | all | Used by **Record (10s)**. Microphones record at the device's own sample rate and keep the loudest channel. If a mic won't open through WASAPI, Lyrebird retries it through MME and DirectSound. "What you hear" records the output device at 48 kHz and mixes it to mono. A silent recording is rejected rather than saved as a voice. |
 | **Model** | Standard / Turbo / Multilingual (Standard) | all | **Standard:** the original 0.5B English model. Best quality, and supports every option. **Turbo:** a smaller 350M English model that's much faster and understands [sound tags](#sound-tags). **Multilingual:** the 0.5B model for 23 languages. Only one model is kept in memory; switching models unloads the previous one. |
 | **Language** | 23 languages (en) | Multilingual | The language of the *text*. The voice sample can be in any language, but one in the same language as the text sounds most natural. Supported: Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish. |
 | **Exaggeration** | 0.25 – 2.0 (0.5) | Standard, Multilingual | Emotional intensity. At 0.5 the delivery is neutral. At 0.7 and above it becomes more dramatic and tends to speed up. Very high values can become unstable. |
