@@ -131,6 +131,12 @@ def speech_bounds(audio, sr, pad=0.15):
     return max(0, loud[0] * hop - margin), min(len(audio), (loud[-1] + 1) * hop + margin)
 
 
+def trim_bounds(audio, sr):
+    """Starting selection for the trim dialog: the speech, but at most a 15 s slice of a long clip."""
+    start, end = speech_bounds(audio, sr)
+    return start, (start + 15 * sr if end - start > 30 * sr else end)
+
+
 def documents_dir():
     buf = ctypes.create_unicode_buffer(260)
     ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf)  # CSIDL_PERSONAL; follows OneDrive redirection
@@ -497,9 +503,7 @@ class TrimDialog(ctk.CTkToplevel):
         self.transient(parent)
         own_icon(self)
         f = fonts()
-        self.start, self.end = speech_bounds(audio, sr)
-        if self.end - self.start > 30 * sr:  # a long import: start with a 15 s slice of the speech
-            self.end = self.start + 15 * sr
+        self.start, self.end = trim_bounds(audio, sr)
 
         head = ctk.CTkFrame(self, fg_color="transparent")
         head.pack(fill="x", padx=20, pady=(18, 0))
@@ -555,7 +559,7 @@ class TrimDialog(ctk.CTkToplevel):
         self.redraw()
 
     def auto(self):
-        self.start, self.end = speech_bounds(self.audio, self.sr)
+        self.start, self.end = trim_bounds(self.audio, self.sr)
         self.redraw()
 
     def redraw(self):
@@ -668,7 +672,7 @@ class App:
                      text_color=MUTED).pack(side="left", pady=(3, 0))
         self.session_label = ctk.CTkLabel(header, text="", font=f["small"], text_color=MUTED)
         self.session_label.pack(side="left", padx=(12, 0), pady=(3, 0))
-        self.appearance = tk.StringVar(value=ctk.get_appearance_mode())
+        self.appearance = tk.StringVar(value="System")  # apply_settings restores a saved choice
         ctk.CTkSegmentedButton(header, values=["Light", "Dark", "System"], variable=self.appearance, font=f["small"],
                                command=self.set_appearance, height=28, corner_radius=8, fg_color=LINE,
                                selected_color=SURFACE, selected_hover_color=SURFACE, unselected_color=LINE,
@@ -800,16 +804,17 @@ class App:
                 target.drop_target_register(DND_FILES)
                 target.dnd_bind("<<Drop>>", self.on_drop)
         for widget in (root, self.text):  # on the text box too, where Ctrl+O would otherwise insert a line
-            widget.bind("<Control-o>", lambda e: (self.open_dialog(), "break")[1])
-            widget.bind("<Control-s>", lambda e: (self.save_session(), "break")[1])
-            widget.bind("<Control-S>", lambda e: (self.save_session(ask=True), "break")[1])
+            for key in "oO":  # both cases: Caps Lock turns the letter upper-case without Shift
+                widget.bind(f"<Control-{key}>", lambda e: (self.open_dialog(), "break")[1])
+            for key in "sS":  # Shift (state bit 0x1), not the letter's case, means Save as
+                widget.bind(f"<Control-{key}>", lambda e: (self.save_session(ask=bool(e.state & 0x1)), "break")[1])
         self.editor_colors()
         ctk.AppearanceModeTracker.add(lambda mode: self.root.after(0, self.editor_colors), root)
+        ctk.ScalingTracker.add_widget(lambda *_: self.root.after(0, self.editor_colors), self.editor)
         self.refresh_voices()
         self.refresh_sources(reinit=False)
         self.apply_settings(load_settings())
         self.sync_options()
-        self.sync_play()
 
     # --- widgets -------------------------------------------------------------
     def card(self, parent, accent, title, hint=None):
@@ -958,7 +963,7 @@ class App:
         """Restore what load_settings() returned, skipping anything that no longer fits (a removed mic, etc.)."""
         choices = ((self.model_var, "model", MODELS), (self.lang_var, "language", [f"{k} - {v}" for k, v in LANGUAGES.items()]),
                    (self.format_var, "format", FORMATS), (self.rate_var, "sample_rate", RATES),
-                   (self.voice_var, "voice", self.voices), (self.source_var, "source", self.sources))
+                   (self.voice_var, "voice", [BUILTIN_VOICE, *self.voices]), (self.source_var, "source", [DEFAULT_MIC, *self.sources]))
         for var, key, allowed in choices:
             if s.get(key) in allowed:
                 var.set(s[key])
@@ -973,6 +978,7 @@ class App:
         if s.get("appearance") in ("Light", "Dark", "System"):
             self.appearance.set(s["appearance"])
             self.set_appearance(s["appearance"])
+        self.sync_play()  # the voice may have changed
 
     # --- sessions ------------------------------------------------------------
     def open_dialog(self):
@@ -995,6 +1001,9 @@ class App:
         elif ext in TEXT_EXTS:
             self.load_script(path)
         elif ext in AUDIO_EXTS:
+            if self.busy:  # same rule as the disabled Record and Import buttons
+                self.status.set("Wait for the current recording or render to finish before adding a voice.")
+                return
             self.import_audio(path)
         else:
             self.status.set(f"Lyrebird can't open {Path(path).name}. Try a session, a .txt script or an audio clip.")
@@ -1015,7 +1024,12 @@ class App:
             self.status.set(f"Loaded {Path(path).name}.")
 
     def session_dir(self):
-        return self.session_path.parent if self.session_path else self.out_folder()
+        if self.session_path:
+            return self.session_path.parent
+        try:
+            return self.out_folder()
+        except OSError:  # e.g. the output drive is unplugged; the dialog just starts somewhere else
+            return None
 
     def set_session(self, path):
         self.session_path = Path(path) if path else None

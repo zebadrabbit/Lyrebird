@@ -144,7 +144,7 @@ class Setup:
         py = ("--python", ENV)
         try:
             if not (ENV / "Scripts" / "python.exe").exists():  # an update reuses it; it may be in use by an open Lyrebird
-                self.run("Step 1 of 3: Downloading Python", "venv", "--managed-python", "--python", "3.12", ENV)
+                self.run("Step 1 of 3: Downloading Python", "venv", "--managed-python", "--python", "3.12", "--allow-existing", ENV)
             try:
                 self.run("Step 2 of 3: Downloading PyTorch and libraries", "pip", "install", *py, "-r", REQS, "--torch-backend", "auto")
             except RuntimeError:

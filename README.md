@@ -136,7 +136,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 `build.ps1` does the following:
 
-1. Creates a small `.venv` with PyInstaller and uv.
+1. Creates a small `.venv` with PyInstaller, uv and the packages the tests import (numpy, CustomTkinter, tkinterdnd2).
 2. Runs the tests.
 3. Builds the launcher in `%TEMP%\lyrebird-build`. It builds there because OneDrive/Dropbox-synced folders lock freshly written files.
 4. Writes `dist\Lyrebird-win64.zip`.
@@ -146,13 +146,13 @@ Pushing a `v*` tag makes GitHub Actions build the zip and attach it to a GitHub 
 **Run from source** (uses the same first-run setup as the release):
 
 ```powershell
-uv run --no-project --managed-python --python 3.12 launcher.py
+uv run --no-project --managed-python --python 3.12 --with customtkinter==6.0.0 launcher.py
 ```
 
 **Tests** (no model or GPU needed):
 
 ```powershell
-uv run --no-project --managed-python --python 3.12 test_lyrebird.py
+uv run --no-project --managed-python --python 3.12 --with "numpy<2" --with customtkinter==6.0.0 --with tkinterdnd2==0.6.3 test_lyrebird.py
 ```
 
 ## Project layout
@@ -199,5 +199,5 @@ Only clone voices you have permission to use. Every file Chatterbox generates ca
 - **Lyrebird:** MIT License, see [LICENSE](LICENSE).
 - **[Chatterbox](https://github.com/resemble-ai/chatterbox):** TTS models and code © Resemble AI, MIT License.
 - **Brand kit** (`brand/`, see its [README](brand/README.md)): logo and icon are part of Lyrebird (MIT). The fonts in `brand/fonts/` (Bricolage Grotesque, Atkinson Hyperlegible Next, IBM Plex Mono) are under the SIL Open Font License 1.1; the license texts are next to them.
-- **The release zip** contains the Lyrebird launcher, a Python runtime (PSF License), Tcl/Tk (BSD-style) and [uv](https://github.com/astral-sh/uv) (MIT/Apache-2.0).
+- **The release zip** contains the Lyrebird launcher, a Python runtime (PSF License), Tcl/Tk (BSD-style), [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) (MIT) with its Roboto fonts (Apache-2.0), darkdetect (BSD-3-Clause), packaging (Apache-2.0/BSD) and [uv](https://github.com/astral-sh/uv) (MIT/Apache-2.0).
 - **Packages downloaded during setup** come from PyPI and the PyTorch index under their own licenses, for example PyTorch (BSD-3-Clause) and [pykakasi](https://codeberg.org/miurahr/pykakasi) (GPL-3.0-or-later). Setup installs them on your PC; the release zip doesn't contain them.

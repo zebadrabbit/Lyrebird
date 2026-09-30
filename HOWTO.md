@@ -76,7 +76,7 @@ Next, the **Trim** window shows the recording as a waveform:
 - **Drag** in the waveform to move the nearest handle, the start or the end.
 - **Play selection** plays just the highlighted part. **Auto-trim** goes back to the automatic selection.
 - The line under the waveform shows the length. It turns amber below 5 seconds (too short for Turbo) and above 20 seconds (longer than it needs to be).
-- **Save** stores the voice. **Cancel** throws the take away.
+- **Save voice** stores the voice. **Cancel** throws the take away.
 
 With a long file, such as a whole podcast episode, Lyrebird selects the first 15 seconds of speech. Drag the handles to the part you want.
 

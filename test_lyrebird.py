@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import lyrebird
-from lyrebird import (chunk_text, clean_name, drop_older_versions, load_voice_settings, speech_bounds,
+from lyrebird import (chunk_text, clean_name, drop_older_versions, load_voice_settings, speech_bounds, trim_bounds,
                       split_speakers, strip_tags, voice_files)
 
 
@@ -62,6 +62,17 @@ def test_speech_bounds():
     assert speech_bounds(np.zeros(3, dtype=np.float32), sr) == (0, 3)  # shorter than one frame
 
 
+def test_trim_bounds():
+    import numpy as np
+
+    sr = 1000
+    speech = 0.5 * np.sin(np.arange(60 * sr)).astype(np.float32)  # a 60 s clip that is all speech
+    start, end = trim_bounds(speech, sr)
+    assert start == 0 and end == 15 * sr  # long clips start on a 15 s slice, from Auto-trim too
+    short = np.concatenate([np.zeros(2 * sr, np.float32), speech[: 8 * sr], np.zeros(2 * sr, np.float32)])
+    assert trim_bounds(short, sr) == speech_bounds(short, sr)  # normal recordings: just the speech
+
+
 def test_clean_name():
     assert clean_name('  My: "voice"?. ') == "My_ _voice__"
     assert clean_name(None) == "" and clean_name(" ... ") == ""
@@ -85,6 +96,7 @@ if __name__ == "__main__":
     test_strip_tags()
     test_voice_replacement()
     test_speech_bounds()
+    test_trim_bounds()
     test_clean_name()
     test_voice_settings()
     print("ok")
