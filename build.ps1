@@ -12,7 +12,7 @@ function Exec($exe) {
 
 if (-not (Test-Path .venv)) { Exec uv venv --managed-python --python 3.12 .venv }
 # The uv package ships uv.exe, which the launcher bundles to install everything on the user's PC.
-Exec uv pip install --python .venv pyinstaller uv==0.11.24 "numpy<2"  # numpy: for the tests only
+Exec uv pip install --python .venv pyinstaller uv==0.11.24 "numpy<2" customtkinter==6.0.0 tkinterdnd2==0.6.3  # the tests import the app
 Exec .venv\Scripts\python.exe test_lyrebird.py
 
 # Build outside the repo: OneDrive/Dropbox-synced folders lock freshly written files mid-build.

@@ -24,3 +24,5 @@ setuptools<81  # resemble-perth imports pkg_resources, removed from newer setupt
 sounddevice
 soundfile
 soundcard==0.4.6  # "What you hear" (WASAPI loopback) recording
+customtkinter==6.0.0  # modern themed widgets (light and dark)
+tkinterdnd2==0.6.3  # drag and drop files onto the window

@@ -15,7 +15,10 @@ import tkinter as tk
 import winsound
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox
+
+import customtkinter as ctk
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 VERSION = "0.2.0"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Lyrebird"
@@ -58,6 +61,10 @@ FORMATS = {  # label: (soundfile format, subtype, extension)
 RATES = {"24 kHz (model native)": None, "44.1 kHz": 44100, "48 kHz": 48000}
 AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg")
 AUDIO_TYPES = [("Audio", " ".join(f"*{e}" for e in AUDIO_EXTS))]
+TEXT_EXTS = (".txt", ".md")
+SESSION_EXT = ".lyrebird"
+OPEN_TYPES = [("Sessions, scripts and voice clips", " ".join(f"*{e}" for e in (SESSION_EXT, *TEXT_EXTS, *AUDIO_EXTS))),
+              ("Lyrebird sessions", f"*{SESSION_EXT}"), ("Text", "*.txt *.md"), *AUDIO_TYPES]
 BUILTIN_VOICE = "(Built-in voice)"
 BUILTIN_NAME = "Built-in"  # speaker name for the built-in voice in dialogue scripts
 DEFAULT_MIC = "(Windows default microphone)"
@@ -70,9 +77,25 @@ TURBO_TAGS = (
     "[narration]", "[advertisement]",
 )
 TAG_RE = re.compile("|".join(map(re.escape, TURBO_TAGS)))
-# Brand colours (brand/tokens.json, light theme).
-INK, INK_MUTED, PLUME, PLUME_SOFT, FERN, SURFACE, LINE, TAG_OFF = (
-    "#18201c", "#56615a", "#a8471f", "#f6e3d6", "#1f3d31", "#fbfbf8", "#d9ddd4", "#8a5a00")
+# Brand palette (brand/tokens.json) as (light, dark) pairs; CustomTkinter follows the Windows theme.
+GROUND = ("#f2f3ee", "#111613")
+SURFACE = ("#fbfbf8", "#19201c")
+LINE = ("#d9ddd4", "#2c3631")
+INK = ("#18201c", "#e7ece6")
+MUTED = ("#56615a", "#9aa79f")
+PLUME = ("#a8471f", "#f0a36e")  # the one brand hue: Render, sliders, focus
+PLUME_HOVER = ("#8e3a18", "#f5b88c")
+ON_PLUME = ("#fffaf5", "#1b0f08")
+PLUME_SOFT = ("#f6e3d6", "#3a2216")
+# Small accents that call out what each area is for.
+ACCENT = {"voice": ("#2f7a5a", "#6cc59b"), "script": ("#1a5fb4", "#8fb8f0"),
+          "delivery": ("#b8862a", "#e2b04a"), "render": PLUME}
+RECORD_RED = ("#c01c28", "#ff7b82")
+# Script highlight colours (brand editor tokens).
+EDITOR = {"speaker": ("#1a5fb4", "#8fb8f0"), "tag": ("#0b4f8a", "#b5d6ff"), "tag_bg": ("#d7ebff", "#13314f"),
+          "tag_off": ("#8a5a00", "#f2cf73"), "tag_off_bg": ("#fff0c2", "#3d2e05"), "tag_bad": ("#c01c28", "#ff7b82")}
+SLIDER_STYLE = dict(fg_color=LINE, progress_color=PLUME, button_color=PLUME, button_hover_color=PLUME_HOVER)
+OFF = ("#b9bfb6", "#46514b")  # a control that doesn't apply to the selected model
 
 
 class Stopped(Exception):
@@ -360,47 +383,152 @@ class Engine:
         sf.write(out_path, audio, sr, format=fmt[0], subtype=fmt[1])
 
 
-class TrimDialog(tk.Toplevel):
+def pick(pair):
+    """The light or dark half of a colour pair, for plain Tk widgets that CustomTkinter doesn't theme."""
+    return pair[ctk.get_appearance_mode() == "Dark"]
+
+
+def dot_image(pair, size=10):
+    """A small filled circle in a colour pair, for button call-outs (e.g. the red dot on Record)."""
+    from PIL import Image, ImageDraw
+
+    def draw(color):
+        img = Image.new("RGBA", (size * 4, size * 4), (0, 0, 0, 0))
+        ImageDraw.Draw(img).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=color)
+        return img.resize((size, size), Image.LANCZOS)  # drawn big and scaled down for smooth edges
+
+    return ctk.CTkImage(light_image=draw(pair[0]), dark_image=draw(pair[1]), size=(size, size))
+
+
+def own_icon(window):
+    """CustomTkinter swaps in its own icon ~200 ms after a window opens; put Lyrebird's back."""
+    icon = asset("lyrebird.ico")
+    if icon:
+        window.after(250, lambda: window.iconbitmap(str(icon)))
+
+
+def fonts():
+    return {"brand": ctk.CTkFont("Segoe UI Semibold", 17), "title": ctk.CTkFont("Segoe UI Semibold", 14),
+            "body": ctk.CTkFont("Segoe UI", 13), "small": ctk.CTkFont("Segoe UI", 12),
+            "button": ctk.CTkFont("Segoe UI Semibold", 13), "script": ctk.CTkFont("Segoe UI", 14)}
+
+
+def button(parent, text, command, kind="secondary", **kw):
+    """Primary = the one russet action on screen; secondary = quiet outlined buttons."""
+    style = {"primary": dict(fg_color=PLUME, hover_color=PLUME_HOVER, text_color=ON_PLUME),
+             "secondary": dict(fg_color=GROUND, hover_color=LINE, text_color=INK, border_width=1, border_color=LINE)}
+    options = {"corner_radius": 8, "height": 34, "text_color_disabled": MUTED, **style[kind], **kw}
+    return ctk.CTkButton(parent, text=text, command=command, **options)
+
+
+class Menu(ctk.CTkOptionMenu):
+    """A calm dropdown that can refresh its choices right before it opens (new voices, plugged-in mics)."""
+
+    def __init__(self, parent, variable, values, refresh=None, **kw):
+        super().__init__(parent, variable=variable, values=list(values) or [""], dynamic_resizing=False,
+                         corner_radius=8, height=34, fg_color=GROUND, button_color=GROUND, button_hover_color=LINE,
+                         text_color=INK, text_color_disabled=MUTED, dropdown_fg_color=SURFACE,
+                         dropdown_hover_color=GROUND, dropdown_text_color=INK, **kw)
+        self.refresh = refresh
+
+    def _open_dropdown_menu(self):
+        if self.refresh:
+            self.refresh()
+        super()._open_dropdown_menu()
+
+
+def popup(widget, entries):
+    """A plain dropdown menu under `widget`: entries are (label, command, enabled) or None for a separator."""
+    menu = tk.Menu(widget, tearoff=False)
+    for entry in entries:
+        if entry is None:
+            menu.add_separator()
+        else:
+            label, command, enabled = entry
+            menu.add_command(label=label, command=command, state="normal" if enabled else "disabled")
+    menu.tk_popup(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height())
+
+
+def ask_text(parent, title, prompt, initial=""):
+    """A small themed text prompt. Returns the text, or None if cancelled."""
+    f = fonts()
+    dialog = ctk.CTkToplevel(parent, fg_color=SURFACE)
+    dialog.title(title)
+    dialog.resizable(False, False)
+    dialog.transient(parent)
+    own_icon(dialog)
+    result = {"text": None}
+    ctk.CTkLabel(dialog, text=prompt, font=f["body"], text_color=INK).pack(anchor="w", padx=20, pady=(18, 6))
+    var = tk.StringVar(value=initial)
+    entry = ctk.CTkEntry(dialog, textvariable=var, width=320, height=34, corner_radius=8, font=f["body"],
+                         fg_color=GROUND, border_color=LINE, text_color=INK)
+    entry.pack(padx=20)
+    row = ctk.CTkFrame(dialog, fg_color="transparent")
+    row.pack(fill="x", padx=20, pady=(14, 18))
+
+    def ok():
+        result["text"] = var.get()
+        dialog.destroy()
+
+    button(row, "OK", ok, kind="primary", width=90).pack(side="right")
+    button(row, "Cancel", dialog.destroy, width=90).pack(side="right", padx=8)
+    dialog.bind("<Return>", lambda e: ok())
+    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    dialog.wait_visibility()
+    dialog.grab_set()
+    entry.focus_set()
+    entry.select_range(0, "end")
+    parent.wait_window(dialog)
+    return result["text"]
+
+
+class TrimDialog(ctk.CTkToplevel):
     """Waveform with draggable start/end handles. After it closes, .result is (start, end) in samples, or None."""
 
-    W, H = 640, 140
+    W, H = 640, 150
 
     def __init__(self, parent, audio, sr, title):
         import numpy as np
 
-        super().__init__(parent)
+        super().__init__(parent, fg_color=SURFACE)
         self.audio, self.sr, self.result, self.active = audio, sr, None, "end"
         self.title(title)
         self.resizable(False, False)
         self.transient(parent)
+        own_icon(self)
+        f = fonts()
         self.start, self.end = speech_bounds(audio, sr)
         if self.end - self.start > 30 * sr:  # a long import: start with a 15 s slice of the speech
             self.end = self.start + 15 * sr
 
-        frame = ttk.Frame(self, padding=12)
-        frame.pack(fill="both")
-        ttk.Label(frame, text="Drag the handles to keep only clean speech. 5-20 s works best.").pack(anchor="w")
-        self.canvas = tk.Canvas(frame, width=self.W, height=self.H, background=SURFACE, highlightthickness=1,
-                                highlightbackground=LINE, cursor="sb_h_double_arrow")
-        self.canvas.pack(pady=8)
-        self.selection = self.canvas.create_rectangle(0, 0, 0, self.H, fill=PLUME_SOFT, outline="")
+        head = ctk.CTkFrame(self, fg_color="transparent")
+        head.pack(fill="x", padx=20, pady=(18, 0))
+        ctk.CTkFrame(head, width=8, height=8, corner_radius=4, fg_color=ACCENT["voice"]).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(head, text="Keep only clean speech", font=f["title"], text_color=INK).pack(side="left")
+        ctk.CTkLabel(self, text="Drag in the waveform to move the nearest handle. 5 to 20 seconds works best.",
+                     font=f["small"], text_color=MUTED).pack(anchor="w", padx=20, pady=(2, 10))
+        self.canvas = tk.Canvas(self, width=self.W, height=self.H, background=pick(GROUND), highlightthickness=1,
+                                highlightbackground=pick(LINE), cursor="sb_h_double_arrow")
+        self.canvas.pack(padx=20)
+        self.selection = self.canvas.create_rectangle(0, 0, 0, self.H, fill=pick(PLUME_SOFT), outline="")
         edges = np.linspace(0, len(audio), self.W + 1).astype(int)
-        mid, scale = self.H / 2, 0.92 * self.H / 2 / max(float(np.abs(audio).max()), 1e-6)
+        mid, scale = self.H / 2, 0.9 * self.H / 2 / max(float(np.abs(audio).max()), 1e-6)
+        wave = pick(ACCENT["voice"])
         for x in range(self.W):  # min/max envelope, one line per pixel column
             seg = audio[edges[x]:max(edges[x + 1], edges[x] + 1)]
-            self.canvas.create_line(x, mid - seg.max() * scale, x, mid - seg.min() * scale + 1, fill=FERN)
-        self.handles = [self.canvas.create_line(0, 0, 0, self.H, fill=PLUME, width=3) for _ in range(2)]
+            self.canvas.create_line(x, mid - seg.max() * scale, x, mid - seg.min() * scale + 1, fill=wave)
+        self.handles = [self.canvas.create_line(0, 0, 0, self.H, fill=pick(PLUME), width=3) for _ in range(2)]
         self.canvas.bind("<Button-1>", self.pick)
         self.canvas.bind("<B1-Motion>", self.drag)
-        self.info = ttk.Label(frame)
-        self.info.pack(anchor="w")
+        self.info = ctk.CTkLabel(self, font=f["small"], text_color=MUTED)
+        self.info.pack(anchor="w", padx=20, pady=(8, 0))
 
-        buttons = ttk.Frame(frame)
-        buttons.pack(fill="x", pady=(8, 0))
-        ttk.Button(buttons, text="Auto-trim", command=self.auto).pack(side="left")
-        ttk.Button(buttons, text="Play selection", command=self.play).pack(side="left", padx=8)
-        ttk.Button(buttons, text="Save", command=self.save, default="active").pack(side="right")
-        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right", padx=8)
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=(12, 18))
+        button(row, "Auto-trim", self.auto).pack(side="left")
+        button(row, "▶  Play selection", self.play).pack(side="left", padx=8)
+        button(row, "Save voice", self.save, kind="primary").pack(side="right")
+        button(row, "Cancel", self.destroy).pack(side="right", padx=8)
         self.bind("<Return>", lambda e: self.save())
         self.bind("<Escape>", lambda e: self.destroy())
         self.bind("<Destroy>", lambda e: e.widget is self and winsound.PlaySound(None, 0))  # stop any preview
@@ -436,9 +564,9 @@ class TrimDialog(tk.Toplevel):
         for handle, x in zip(self.handles, (x0, x1)):
             self.canvas.coords(handle, x, 0, x, self.H)
         secs = (self.end - self.start) / self.sr
-        hint = " Turbo needs more than 5 s." if secs <= 5 else " Longer than 20 s adds little." if secs > 20 else ""
-        self.info.configure(text=f"Keeping {self.start / self.sr:.2f} s to {self.end / self.sr:.2f} s "
-                                 f"({secs:.1f} s).{hint}", foreground=TAG_OFF if hint else INK_MUTED)
+        hint = "  Turbo needs more than 5 s." if secs <= 5 else "  Longer than 20 s adds little." if secs > 20 else ""
+        self.info.configure(text=f"Keeping {self.start / self.sr:.2f} s to {self.end / self.sr:.2f} s  ·  {secs:.1f} s{hint}",
+                            text_color=EDITOR["tag_off"] if hint else MUTED)
 
     def play(self):
         import soundfile as sf
@@ -453,38 +581,46 @@ class TrimDialog(tk.Toplevel):
         self.destroy()
 
 
-class VoiceSettingsDialog(tk.Toplevel):
-    """Per-voice slider values. Ticked rows override the main sliders whenever this voice speaks."""
+class VoiceSettingsDialog(ctk.CTkToplevel):
+    """Per-voice slider values. Switched-on rows override the main sliders whenever this voice speaks."""
 
     def __init__(self, parent, name, current):
-        super().__init__(parent)
+        super().__init__(parent, fg_color=SURFACE)
         self.name, self.rows = name, {}
         self.title(f"Settings for {name}")
         self.resizable(False, False)
         self.transient(parent)
+        own_icon(self)
+        f = fonts()
         saved = load_voice_settings(name)
-        frame = ttk.Frame(self, padding=12)
-        frame.pack(fill="both")
-        frame.columnconfigure(1, weight=1)
-        ttk.Label(frame, wraplength=420, justify="left", text=f'Tick a setting to give "{name}" its own value. '
-                  "It's used whenever this voice speaks, including in dialogues. Unticked settings follow "
-                  "the main sliders. Turbo only uses Temperature.").grid(row=0, column=0, columnspan=3, sticky="w")
-        for row, (key, (label, lo, hi, _)) in enumerate(SLIDERS.items(), 1):
+        head = ctk.CTkFrame(self, fg_color="transparent")
+        head.pack(fill="x", padx=20, pady=(18, 0))
+        ctk.CTkFrame(head, width=8, height=8, corner_radius=4, fg_color=ACCENT["delivery"]).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(head, text=f"{name}'s own delivery", font=f["title"], text_color=INK).pack(side="left")
+        ctk.CTkLabel(self, font=f["small"], text_color=MUTED, justify="left", wraplength=400, anchor="w",
+                     text="Switch a setting on to give this voice its own value, used whenever it speaks, including "
+                          "in dialogues. Settings left off follow the main sliders. Turbo only uses Temperature."
+                     ).pack(fill="x", padx=20, pady=(2, 12))
+        grid = ctk.CTkFrame(self, fg_color="transparent")
+        grid.pack(fill="x", padx=20)
+        for row, (key, (label, lo, hi, _)) in enumerate(SLIDERS.items()):
             use, value = tk.BooleanVar(value=key in saved), tk.DoubleVar(value=saved.get(key, current[key]))
-            scale = ttk.Scale(frame, from_=lo, to=hi, variable=value, length=240)
-            shown = ttk.Label(frame, width=5)
-            value.trace_add("write", lambda *_, v=value, s=shown: s.configure(text=f"{v.get():.2f}"))
-            value.set(value.get())
-            toggle = lambda u=use, s=scale: s.state(["!disabled"] if u.get() else ["disabled"])
-            ttk.Checkbutton(frame, text=label, variable=use, command=toggle).grid(row=row, column=0, sticky="w", pady=4)
-            scale.grid(row=row, column=1, sticky="ew", padx=8)
+            shown = ctk.CTkLabel(grid, width=40, font=f["small"], text_color=MUTED, anchor="e")
+            slider = ctk.CTkSlider(grid, from_=lo, to=hi, variable=value, width=200, **SLIDER_STYLE,
+                                   command=lambda v, s=shown: s.configure(text=f"{v:.2f}"))
+            shown.configure(text=f"{value.get():.2f}")
+            toggle = lambda u=use, s=slider: s.configure(state="normal" if u.get() else "disabled")
+            ctk.CTkSwitch(grid, text=label, variable=use, command=toggle, font=f["body"], text_color=INK,
+                          progress_color=PLUME, button_color=SURFACE, button_hover_color=GROUND, fg_color=LINE
+                          ).grid(row=row, column=0, sticky="w", pady=6)
+            slider.grid(row=row, column=1, padx=12)
             shown.grid(row=row, column=2)
             toggle()
             self.rows[key] = (use, value)
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=len(SLIDERS) + 1, column=0, columnspan=3, sticky="e", pady=(12, 0))
-        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="left", padx=8)
-        ttk.Button(buttons, text="Save", command=self.save, default="active").pack(side="left")
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.pack(fill="x", padx=20, pady=(14, 18))
+        button(buttons, "Save", self.save, kind="primary", width=90).pack(side="right")
+        button(buttons, "Cancel", self.destroy, width=90).pack(side="right", padx=8)
         self.bind("<Escape>", lambda e: self.destroy())
         self.wait_visibility()  # grabbing an unmapped window fails on Windows
         self.grab_set()
@@ -504,151 +640,234 @@ class App:
         self.root = root
         self.engine = Engine()
         self.output = None
-        self.buttons = []
+        self.buttons = []  # disabled while recording or rendering
         self.busy = False
         self.cancel = threading.Event()
+        self.voices, self.sources = {}, {}
+        f = self.f = fonts()
 
         root.title("Lyrebird")
-        root.minsize(620, 600)
+        root.configure(fg_color=GROUND)
+        root.geometry("1180x800")
+        root.minsize(1000, 720)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(1, weight=1)
         root.protocol("WM_DELETE_WINDOW", self.close)
-        pad = {"padx": 8, "pady": 4}
 
-        # Voice library + recording source
-        voice = ttk.LabelFrame(root, text="1. Voice")
-        voice.grid(row=0, column=0, sticky="ew", **pad)
-        voice.columnconfigure(1, weight=1)
-        ttk.Label(voice, text="Voice").grid(row=0, column=0, sticky="w", **pad)
+        # Header: name, version, appearance
+        header = ctk.CTkFrame(root, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(16, 8))
+        logo = asset("lyrebird-256.png")
+        if logo:
+            from PIL import Image
+
+            image = ctk.CTkImage(Image.open(logo), size=(26, 26))
+            ctk.CTkLabel(header, text="", image=image).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(header, text="Lyrebird", font=f["brand"], text_color=INK).pack(side="left")
+        ctk.CTkLabel(header, text=f"  {VERSION}  ·  Voice cloning with Chatterbox", font=f["small"],
+                     text_color=MUTED).pack(side="left", pady=(3, 0))
+        self.session_label = ctk.CTkLabel(header, text="", font=f["small"], text_color=MUTED)
+        self.session_label.pack(side="left", padx=(12, 0), pady=(3, 0))
+        self.appearance = tk.StringVar(value=ctk.get_appearance_mode())
+        ctk.CTkSegmentedButton(header, values=["Light", "Dark", "System"], variable=self.appearance, font=f["small"],
+                               command=self.set_appearance, height=28, corner_radius=8, fg_color=LINE,
+                               selected_color=SURFACE, selected_hover_color=SURFACE, unselected_color=LINE,
+                               unselected_hover_color=GROUND, text_color=INK).pack(side="right")
+        for text, command in (("Save as...", lambda: self.save_session(ask=True)), ("Save", self.save_session),
+                              ("Open...", self.open_dialog)):
+            button(header, text, command, width=84, height=28, font=f["small"]).pack(side="right", padx=(0, 8))
+
+        body = ctk.CTkFrame(root, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=24)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+
+        # Script (left, takes the space)
+        script, s = self.card(body, "script", "Script",
+                              'Type what to say. Start a line with a saved voice\'s name, like "Alice: Hi!", to switch speaker.\n'
+                              "Drop a text file, voice clip or saved session anywhere on the window to open it.")
+        script.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        s.rowconfigure(0, weight=1)
+        s.columnconfigure(0, weight=1)
+        self.editor = ctk.CTkTextbox(s, font=f["script"], wrap="word", undo=True, corner_radius=10, border_width=1,
+                                     fg_color=GROUND, border_color=LINE, text_color=INK, border_spacing=10)
+        self.editor.grid(row=0, column=0, sticky="nsew")
+        self.text = self.editor._textbox  # the plain Tk text widget: tags, marks and <<Modified>> live here
+        self.text.bind("<<Modified>>", self.on_text_modified)
+        tools = ctk.CTkFrame(s, fg_color="transparent")
+        tools.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        insert = button(tools, "Insert tag  ▾", None, width=120)
+        insert.configure(command=lambda: popup(insert, [(t, lambda t=t: self.insert_tag(t), True) for t in TURBO_TAGS]))
+        insert.pack(side="left")
+        for key, label in (("tag", "spoken (Turbo)"), ("tag_off", "left out by this model"), ("tag_bad", "unknown tag")):
+            chip = ctk.CTkLabel(tools, text=f" [tag] ", font=f["small"], corner_radius=6, text_color=EDITOR[key],
+                                fg_color=EDITOR.get(key + "_bg", "transparent"))
+            chip.pack(side="left", padx=(14, 4))
+            ctk.CTkLabel(tools, text=label, font=f["small"], text_color=MUTED).pack(side="left")
+
+        # Sidebar: voice, delivery, output
+        side = ctk.CTkFrame(body, fg_color="transparent", width=370)
+        side.grid(row=0, column=1, sticky="ns")
+        side.grid_propagate(False)
+        side.columnconfigure(0, weight=1)
+
+        voice, v = self.card(side, "voice", "Voice")
+        voice.grid(row=0, column=0, sticky="ew")
+        v.columnconfigure(0, weight=1)
         self.voice_var = tk.StringVar(value=BUILTIN_VOICE)
-        self.voice_box = ttk.Combobox(voice, textvariable=self.voice_var, state="readonly", postcommand=self.refresh_voices)
-        self.voice_box.grid(row=0, column=1, sticky="ew", **pad)
-        self.voice_box.bind("<<ComboboxSelected>>", self.sync_play)
-        self.play_voice = ttk.Button(voice, text="Play", command=lambda: self.play(self.ref))
-        self.play_voice.grid(row=0, column=2, **pad)
-        manage = ttk.Menubutton(voice, text="Manage")
-        self.manage_menu = tk.Menu(manage, tearoff=False, postcommand=self.sync_manage)
-        self.manage_menu.add_command(label="Rename...", command=self.rename_voice)
-        self.manage_menu.add_command(label="Delete", command=self.delete_voice)
-        self.manage_menu.add_command(label="Voice settings...", command=self.edit_voice_settings)
-        self.manage_menu.add_separator()
-        self.manage_menu.add_command(label="Open voices folder", command=lambda: os.startfile(voices_dir()))
-        manage["menu"] = self.manage_menu
-        manage.grid(row=0, column=3, sticky="ew", **pad)
-        self.buttons.append(manage)
-        ttk.Label(voice, text="Source").grid(row=1, column=0, sticky="w", **pad)
+        self.voice_menu = Menu(v, self.voice_var, [BUILTIN_VOICE], refresh=self.refresh_voices, font=f["body"],
+                               command=lambda _: self.sync_play())
+        self.voice_menu.grid(row=0, column=0, sticky="ew")
+        self.play_voice = button(v, "▶", lambda: self.play(self.ref), width=40)
+        self.play_voice.grid(row=0, column=1, padx=(8, 0))
+        self.manage = button(v, "···", None, width=40)
+        self.manage.configure(command=self.show_manage)
+        self.manage.grid(row=0, column=2, padx=(8, 0))
+        self.buttons.append(self.manage)
         self.source_var = tk.StringVar(value=DEFAULT_MIC)
-        self.source_box = ttk.Combobox(voice, textvariable=self.source_var, state="readonly", postcommand=self.refresh_sources)
-        self.source_box.grid(row=1, column=1, sticky="ew", **pad)
-        self._button(voice, f"Record ({RECORD_SECONDS}s)", self.record).grid(row=1, column=2, **pad)
-        self._button(voice, "Import...", self.import_audio).grid(row=1, column=3, sticky="ew", **pad)
-        ttk.Label(voice, foreground="gray", text="Record or import 5-20 s of clean speech to add a voice. \"What you "
-                  "hear\" records audio playing on this PC.").grid(row=2, column=0, columnspan=4, sticky="w", **pad)
-        self.sources = {}
+        self.source_menu = Menu(v, self.source_var, [DEFAULT_MIC], refresh=self.refresh_sources, font=f["small"])
+        self.source_menu.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        row = ctk.CTkFrame(v, fg_color="transparent")
+        row.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        row.columnconfigure((0, 1), weight=1)
+        rec = button(row, f"Record {RECORD_SECONDS} s", self.record, image=dot_image(RECORD_RED), compound="left")
+        rec.grid(row=0, column=0, sticky="ew")
+        imp = button(row, "Import...", lambda: self.import_audio())
+        imp.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        self.buttons += [rec, imp]
+
+        delivery, d = self.card(side, "delivery", "Delivery")
+        delivery.grid(row=1, column=0, sticky="ew", pady=12)
+        d.columnconfigure(1, weight=1)
+        menus = ctk.CTkFrame(d, fg_color="transparent")
+        menus.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 4))
+        menus.columnconfigure(0, weight=3)
+        menus.columnconfigure(1, weight=2)
+        self.model_var = tk.StringVar(value=next(iter(MODELS)))
+        Menu(menus, self.model_var, MODELS, font=f["body"], command=lambda _: self.sync_options()
+             ).grid(row=0, column=0, sticky="ew")
+        self.lang_var = tk.StringVar(value="en - English")
+        self.lang_menu = Menu(menus, self.lang_var, [f"{k} - {v_}" for k, v_ in LANGUAGES.items()], font=f["body"])
+        self.lang_menu.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        self.sliders = {}
+        for row, (key, spec) in enumerate(SLIDERS.items(), 1):
+            self.sliders[key] = self.slider(d, row, *spec)
+        seed_row = ctk.CTkFrame(d, fg_color="transparent")
+        seed_row.grid(row=len(SLIDERS) + 1, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        ctk.CTkLabel(seed_row, text="Seed", font=f["body"], text_color=INK).pack(side="left")
+        ctk.CTkLabel(seed_row, text="0 = a new take every time", font=f["small"], text_color=MUTED).pack(side="left", padx=8)
+        self.seed = tk.StringVar(value="0")
+        ctk.CTkEntry(seed_row, textvariable=self.seed, width=110, height=32, corner_radius=8, font=f["body"],
+                     fg_color=GROUND, border_color=LINE, text_color=INK, justify="right").pack(side="right")
+
+        output, o = self.card(side, "render", "Output")
+        output.grid(row=2, column=0, sticky="ew")
+        o.columnconfigure(0, weight=1)
+        self.out_dir = tk.StringVar(value=str(documents_dir() / "Lyrebird"))
+        ctk.CTkEntry(o, textvariable=self.out_dir, height=34, corner_radius=8, font=f["small"], fg_color=GROUND,
+                     border_color=LINE, text_color=INK).grid(row=0, column=0, sticky="ew")
+        button(o, "Browse...", self.browse_out, width=90).grid(row=0, column=1, padx=(8, 0))
+        fmt_row = ctk.CTkFrame(o, fg_color="transparent")
+        fmt_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        fmt_row.columnconfigure((0, 1), weight=1)
+        self.format_var = tk.StringVar(value=next(iter(FORMATS)))
+        Menu(fmt_row, self.format_var, FORMATS, font=f["small"]).grid(row=0, column=0, sticky="ew")
+        self.rate_var = tk.StringVar(value=next(iter(RATES)))
+        Menu(fmt_row, self.rate_var, RATES, font=f["small"]).grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+        # Action bar
+        bar = ctk.CTkFrame(root, fg_color=SURFACE, border_color=LINE, border_width=1, corner_radius=12)
+        bar.grid(row=2, column=0, sticky="ew", padx=24, pady=(12, 20))
+        bar.columnconfigure(4, weight=1)
+        render = button(bar, "Render", self.render, kind="primary", width=120, height=38, font=f["button"])
+        render.grid(row=0, column=0, rowspan=2, padx=(14, 6), pady=14)
+        self.buttons.append(render)
+        self.stop_button = button(bar, "■  Stop", self.stop, width=90, state="disabled")
+        self.stop_button.grid(row=0, column=1, rowspan=2, padx=6)
+        self.play_output = button(bar, "▶  Play output", lambda: self.play(self.output), width=130)
+        self.play_output.grid(row=0, column=2, rowspan=2, padx=6)
+        button(bar, "Open folder", self.open_folder, width=110).grid(row=0, column=3, rowspan=2, padx=(6, 16))
+        self.status = tk.StringVar(value="Ready.")
+        ctk.CTkLabel(bar, textvariable=self.status, font=f["small"], text_color=MUTED, anchor="w"
+                     ).grid(row=0, column=4, sticky="sew", padx=(0, 16), pady=(12, 0))
+        self.progress = ctk.CTkProgressBar(bar, height=6, corner_radius=3, fg_color=LINE, progress_color=LINE)
+        self.progress.grid(row=1, column=4, sticky="new", padx=(0, 16), pady=(6, 14))
+        self.progress.set(0)
+
+        self.session_path = None
+        if getattr(root, "dnd", False):
+            for target in (root, self.text):  # the script box is most of the window, so it takes drops too
+                target.drop_target_register(DND_FILES)
+                target.dnd_bind("<<Drop>>", self.on_drop)
+        for widget in (root, self.text):  # on the text box too, where Ctrl+O would otherwise insert a line
+            widget.bind("<Control-o>", lambda e: (self.open_dialog(), "break")[1])
+            widget.bind("<Control-s>", lambda e: (self.save_session(), "break")[1])
+            widget.bind("<Control-S>", lambda e: (self.save_session(ask=True), "break")[1])
+        self.editor_colors()
+        ctk.AppearanceModeTracker.add(lambda mode: self.root.after(0, self.editor_colors), root)
         self.refresh_voices()
         self.refresh_sources(reinit=False)
-
-        # Text
-        text_frame = ttk.LabelFrame(root, text='2. Text to speak (dialogue: start a line with a voice name, e.g. "Alice: Hi!")')
-        text_frame.grid(row=1, column=0, sticky="nsew", **pad)
-        text_frame.columnconfigure(0, weight=1)
-        text_frame.rowconfigure(0, weight=1)
-        self.text = tk.Text(text_frame, height=8, wrap="word", undo=True, font=("Segoe UI", 10))
-        self.text.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
-        scroll = ttk.Scrollbar(text_frame, command=self.text.yview)
-        scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 8))
-        self.text.configure(yscrollcommand=scroll.set)
-        self.text.tag_configure("speaker", font=("Segoe UI", 10, "bold"), foreground="#1a5fb4")
-        self.text.tag_configure("tag", background="#d7ebff", foreground="#0b4f8a")
-        self.text.tag_configure("tag_off", background="#fff0c2", foreground=TAG_OFF)
-        self.text.tag_configure("bad_tag", underline=True, foreground="#c01c28")
-        self.text.bind("<<Modified>>", self.on_text_modified)
-        tags = ttk.Frame(text_frame)
-        tags.grid(row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
-        insert = ttk.Menubutton(tags, text="Insert tag")
-        insert["menu"] = menu = tk.Menu(insert, tearoff=False)
-        for tag in TURBO_TAGS:
-            menu.add_command(label=tag, command=lambda t=tag: (self.text.insert("insert", t), self.text.focus_set()))
-        insert.pack(side="left")
-        ttk.Label(tags, foreground="gray", text="Tags like [laugh] only work with the Turbo model "
-                  "(amber = ignored by this model, red = unknown tag).").pack(side="left", padx=8)
-
-        # Options
-        opts = ttk.LabelFrame(root, text="3. Options")
-        opts.grid(row=2, column=0, sticky="ew", **pad)
-        opts.columnconfigure(1, weight=1)
-        ttk.Label(opts, text="Model").grid(row=0, column=0, sticky="w", **pad)
-        self.model_var = tk.StringVar(value=next(iter(MODELS)))
-        model_box = ttk.Combobox(opts, textvariable=self.model_var, values=list(MODELS), state="readonly")
-        model_box.grid(row=0, column=1, columnspan=2, sticky="ew", **pad)
-        model_box.bind("<<ComboboxSelected>>", lambda e: self.sync_options())
-        ttk.Label(opts, text="Language").grid(row=1, column=0, sticky="w", **pad)
-        self.lang_var = tk.StringVar(value="en - English")
-        self.lang_box = ttk.Combobox(opts, textvariable=self.lang_var, state="readonly",
-                                     values=[f"{k} - {v}" for k, v in LANGUAGES.items()])
-        self.lang_box.grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
-        self.sliders = {key: self._slider(opts, row, *spec) for row, (key, spec) in enumerate(SLIDERS.items(), 2)}
-        ttk.Label(opts, text="Seed (0 = random)").grid(row=5, column=0, sticky="w", **pad)
-        self.seed = tk.IntVar(value=0)
-        ttk.Spinbox(opts, from_=0, to=2**31 - 1, textvariable=self.seed, width=12).grid(row=5, column=1, sticky="w", **pad)
-
-        # Output
-        out = ttk.LabelFrame(root, text="4. Render")
-        out.grid(row=3, column=0, sticky="ew", **pad)
-        out.columnconfigure(1, weight=1)
-        ttk.Label(out, text="Save to").grid(row=0, column=0, sticky="w", **pad)
-        self.out_dir = tk.StringVar(value=str(documents_dir() / "Lyrebird"))
-        ttk.Entry(out, textvariable=self.out_dir).grid(row=0, column=1, sticky="ew", **pad)
-        ttk.Button(out, text="Browse...", command=self.browse_out).grid(row=0, column=2, **pad)
-        ttk.Label(out, text="Format").grid(row=1, column=0, sticky="w", **pad)
-        fmt_row = ttk.Frame(out)
-        fmt_row.grid(row=1, column=1, columnspan=2, sticky="w")
-        self.format_var = tk.StringVar(value=next(iter(FORMATS)))
-        ttk.Combobox(fmt_row, textvariable=self.format_var, values=list(FORMATS), state="readonly",
-                     width=18).pack(side="left", **pad)
-        self.rate_var = tk.StringVar(value=next(iter(RATES)))
-        ttk.Combobox(fmt_row, textvariable=self.rate_var, values=list(RATES), state="readonly",
-                     width=22).pack(side="left", **pad)
-        row = ttk.Frame(out)
-        row.grid(row=2, column=0, columnspan=3, sticky="ew")
-        self._button(row, "Render", self.render).pack(side="left", **pad)
-        self.stop_button = ttk.Button(row, text="Stop", command=self.stop, state="disabled")
-        self.stop_button.pack(side="left", **pad)
-        self.play_output = ttk.Button(row, text="Play output", command=lambda: self.play(self.output))
-        self.play_output.pack(side="left", **pad)
-        ttk.Button(row, text="Open folder", command=self.open_folder).pack(side="left", **pad)
-        self.progress = ttk.Progressbar(out, mode="determinate")
-        self.progress.grid(row=3, column=0, columnspan=3, sticky="ew", **pad)
-        self.status = tk.StringVar(value="Ready.")
-        ttk.Label(out, textvariable=self.status, wraplength=580).grid(row=4, column=0, columnspan=3, sticky="w", **pad)
-
         self.apply_settings(load_settings())
         self.sync_options()
         self.sync_play()
 
     # --- widgets -------------------------------------------------------------
-    def _button(self, parent, text, command):
-        b = ttk.Button(parent, text=text, command=command)
-        self.buttons.append(b)  # disabled while busy
-        return b
+    def card(self, parent, accent, title, hint=None):
+        """A rounded panel whose title carries a small accent dot calling out what it's for."""
+        frame = ctk.CTkFrame(parent, fg_color=SURFACE, border_color=LINE, border_width=1, corner_radius=12)
+        head = ctk.CTkFrame(frame, fg_color="transparent")
+        head.pack(fill="x", padx=18, pady=(14, 0))
+        ctk.CTkFrame(head, width=8, height=8, corner_radius=4, fg_color=ACCENT[accent]).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(head, text=title, font=self.f["title"], text_color=INK).pack(side="left")
+        if hint:
+            ctk.CTkLabel(frame, text=hint, font=self.f["small"], text_color=MUTED, anchor="w", justify="left"
+                         ).pack(fill="x", padx=18, pady=(2, 0))
+        body = ctk.CTkFrame(frame, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=18, pady=(10, 16))
+        return frame, body
 
-    def _slider(self, parent, row, label, lo, hi, default):
+    def slider(self, parent, row, label, lo, hi, default):
+        """One line: name, slider, value."""
         var = tk.DoubleVar(value=default)
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=2)
-        scale = ttk.Scale(parent, from_=lo, to=hi, variable=var)
-        scale.grid(row=row, column=1, sticky="ew", padx=8, pady=2)
-        value = ttk.Label(parent, width=5)
-        value.grid(row=row, column=2, padx=8)
+        name = ctk.CTkLabel(parent, text=label, font=self.f["body"], text_color=INK, anchor="w", width=104)
+        name.grid(row=row, column=0, sticky="w", pady=(8, 0))
+        scale = ctk.CTkSlider(parent, from_=lo, to=hi, variable=var, height=16, width=120, **SLIDER_STYLE)
+        scale.grid(row=row, column=1, sticky="ew", padx=(4, 8), pady=(8, 0))
+        value = ctk.CTkLabel(parent, font=self.f["small"], text_color=MUTED, anchor="e", width=34)
+        value.grid(row=row, column=2, sticky="e", pady=(8, 0))
         var.trace_add("write", lambda *_: value.configure(text=f"{var.get():.2f}"))
         var.set(default)
-        var.scale = scale
+        var.widgets = (scale, name)
         return var
+
+    def insert_tag(self, tag):
+        self.text.insert("insert", tag)
+        self.text.focus_set()
+
+    def editor_colors(self):
+        """Tk text tags don't follow CustomTkinter's light/dark switch, so recolour them by hand."""
+        import tkinter.font as tkfont
+
+        bold = tkfont.Font(font=self.text.cget("font"))
+        bold.configure(weight="bold")
+        self.text.tag_configure("speaker", font=bold, foreground=pick(EDITOR["speaker"]))
+        self.text.tag_configure("tag", foreground=pick(EDITOR["tag"]), background=pick(EDITOR["tag_bg"]))
+        self.text.tag_configure("tag_off", foreground=pick(EDITOR["tag_off"]), background=pick(EDITOR["tag_off_bg"]))
+        self.text.tag_configure("bad_tag", foreground=pick(EDITOR["tag_bad"]), underline=True)
+
+    def set_appearance(self, mode):
+        ctk.set_appearance_mode(mode)
+        self.root.after(50, self.editor_colors)
 
     def sync_options(self):
         kind = MODELS[self.model_var.get()]
-        for key in ("exaggeration", "cfg_weight"):
-            self.sliders[key].scale.state(["disabled"] if kind == "turbo" else ["!disabled"])
-        self.lang_box.state(["!disabled"] if kind == "multilingual" else ["disabled"])
+        for key in ("exaggeration", "cfg_weight"):  # Turbo ignores these: grey them out, don't just lock them
+            scale, name = self.sliders[key].widgets
+            on = kind != "turbo"
+            scale.configure(state="normal" if on else "disabled", button_color=PLUME if on else OFF,
+                            progress_color=PLUME if on else OFF)
+            name.configure(text_color=INK if on else MUTED)
+        self.lang_menu.configure(state="normal" if kind == "multilingual" else "disabled")
         self.highlight()
 
     def on_text_modified(self, _event):
@@ -657,8 +876,8 @@ class App:
             self.highlight()
 
     def highlight(self):
-        """Colour Turbo tags and dialogue speaker names in the text box."""
-        if not hasattr(self, "text"):  # called while the window is still being built
+        """Colour Turbo tags and dialogue speaker names in the script."""
+        if not hasattr(self, "model_var"):  # called while the window is still being built
             return
         for style in ("speaker", "tag", "tag_off", "bad_tag"):
             self.text.tag_remove(style, "1.0", "end")
@@ -678,12 +897,11 @@ class App:
 
     def refresh_voices(self, select=None):
         self.voices = {p.stem: str(p) for p in sorted(voices_dir().iterdir()) if p.suffix.lower() in AUDIO_EXTS}
-        self.voice_box.configure(values=[BUILTIN_VOICE, *self.voices])
+        self.voice_menu.configure(values=[BUILTIN_VOICE, *self.voices])
         if select or self.voice_var.get() not in self.voices:
             self.voice_var.set(select or BUILTIN_VOICE)
         self.highlight()  # speaker names may have changed
-        if hasattr(self, "play_output"):  # not yet built during __init__
-            self.sync_play()
+        self.sync_play()
 
     def refresh_sources(self, reinit=True):
         """List recording sources, re-scanning so newly plugged-in devices show up."""
@@ -699,24 +917,25 @@ class App:
         except Exception as e:  # no audio subsystem: still usable with imported voices
             print(f"Source scan failed: {e}")
             self.sources = {}
-        self.source_box.configure(values=[DEFAULT_MIC, *self.sources])
+        self.source_menu.configure(values=[DEFAULT_MIC, *self.sources])
         if self.source_var.get() not in self.sources:
             self.source_var.set(DEFAULT_MIC)
 
-    def sync_play(self, _event=None):
+    def sync_play(self):
         """Play buttons only work when there is something to play."""
-        self.play_voice.state(["!disabled"] if self.ref else ["disabled"])
-        self.play_output.state(["!disabled"] if self.output else ["disabled"])
+        if hasattr(self, "play_output"):
+            self.play_voice.configure(state="normal" if self.ref else "disabled")
+            self.play_output.configure(state="normal" if self.output else "disabled")
 
-    def sync_manage(self):
-        """Rename, Delete and Voice settings need a saved voice, not the built-in one."""
-        state = "normal" if self.ref else "disabled"
-        for label in ("Rename...", "Delete", "Voice settings..."):
-            self.manage_menu.entryconfigure(label, state=state)
+    def show_manage(self):
+        has_voice = bool(self.ref)  # Rename, Delete and Voice settings need a saved voice
+        popup(self.manage, [("Rename...", self.rename_voice, has_voice), ("Delete", self.delete_voice, has_voice),
+                            ("Voice settings...", self.edit_voice_settings, has_voice), None,
+                            ("Open voices folder", lambda: os.startfile(voices_dir()), True)])
 
     def ask_voice_path(self, default):
         """Ask for a voice name; returns its .wav path in the voice library, or None if cancelled."""
-        name = clean_name(simpledialog.askstring("Lyrebird", "Name this voice:", initialvalue=default, parent=self.root))
+        name = clean_name(ask_text(self.root, "Lyrebird", "Name this voice:", default))
         if not name:
             return None
         if voice_files(name) and not messagebox.askyesno("Lyrebird", f'Replace the existing voice "{name}"?'):
@@ -727,16 +946,17 @@ class App:
     def settings(self):
         try:
             seed = int(self.seed.get())
-        except (tk.TclError, ValueError):
+        except ValueError:
             seed = 0
         return {"model": self.model_var.get(), "language": self.lang_var.get(),
                 **{key: round(var.get(), 3) for key, var in self.sliders.items()}, "seed": seed,
                 "save_to": self.out_dir.get(), "format": self.format_var.get(), "sample_rate": self.rate_var.get(),
-                "voice": self.voice_var.get(), "source": self.source_var.get(), "geometry": self.root.geometry()}
+                "voice": self.voice_var.get(), "source": self.source_var.get(), "appearance": self.appearance.get(),
+                "geometry": self.root.geometry()}
 
     def apply_settings(self, s):
         """Restore what load_settings() returned, skipping anything that no longer fits (a removed mic, etc.)."""
-        choices = ((self.model_var, "model", MODELS), (self.lang_var, "language", self.lang_box.cget("values")),
+        choices = ((self.model_var, "model", MODELS), (self.lang_var, "language", [f"{k} - {v}" for k, v in LANGUAGES.items()]),
                    (self.format_var, "format", FORMATS), (self.rate_var, "sample_rate", RATES),
                    (self.voice_var, "voice", self.voices), (self.source_var, "source", self.sources))
         for var, key, allowed in choices:
@@ -747,9 +967,99 @@ class App:
             if isinstance(s.get(key), (int, float)):
                 var.set(min(max(s[key], lo), hi))
         if isinstance(s.get("seed"), int):
-            self.seed.set(s["seed"])
+            self.seed.set(str(s["seed"]))
         if isinstance(s.get("save_to"), str) and s["save_to"].strip():
             self.out_dir.set(s["save_to"])
+        if s.get("appearance") in ("Light", "Dark", "System"):
+            self.appearance.set(s["appearance"])
+            self.set_appearance(s["appearance"])
+
+    # --- sessions ------------------------------------------------------------
+    def open_dialog(self):
+        path = filedialog.askopenfilename(title="Open a session, script or voice clip", filetypes=OPEN_TYPES,
+                                          initialdir=self.session_dir())
+        if path:
+            self.open_path(path)
+
+    def on_drop(self, event):
+        paths = self.root.tk.splitlist(event.data)
+        if paths:
+            self.root.after(0, self.open_path, paths[0])  # after the drop finishes, so dialogs can open
+        return event.action
+
+    def open_path(self, path):
+        """Open whatever was chosen or dropped: a session, a text script, or an audio clip to make a voice from."""
+        ext = Path(path).suffix.lower()
+        if ext == SESSION_EXT:
+            self.open_session(path)
+        elif ext in TEXT_EXTS:
+            self.load_script(path)
+        elif ext in AUDIO_EXTS:
+            self.import_audio(path)
+        else:
+            self.status.set(f"Lyrebird can't open {Path(path).name}. Try a session, a .txt script or an audio clip.")
+
+    def replace_script(self, text, what):
+        current = self.text.get("1.0", "end-1c").strip()
+        if current and current != text.strip() and not messagebox.askyesno("Lyrebird", f"Replace the current script with {what}?"):
+            return False
+        self.text.delete("1.0", "end")
+        self.text.insert("1.0", text)
+        self.text.edit_reset()  # undo shouldn't bring back the previous script
+        self.highlight()
+        return True
+
+    def load_script(self, path):
+        text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+        if self.replace_script(text, Path(path).name):
+            self.status.set(f"Loaded {Path(path).name}.")
+
+    def session_dir(self):
+        return self.session_path.parent if self.session_path else self.out_folder()
+
+    def set_session(self, path):
+        self.session_path = Path(path) if path else None
+        self.session_label.configure(text=f"·  {self.session_path.stem}" if self.session_path else "")
+        self.root.title(f"{self.session_path.stem} - Lyrebird" if self.session_path else "Lyrebird")
+
+    def save_session(self, ask=False):
+        """Save the script and every setting to a .lyrebird file (voices are referenced by name)."""
+        path = self.session_path
+        if ask or path is None:
+            chosen = filedialog.asksaveasfilename(title="Save session", defaultextension=SESSION_EXT,
+                                                  filetypes=[("Lyrebird sessions", f"*{SESSION_EXT}")],
+                                                  initialdir=self.session_dir(),
+                                                  initialfile=(path.name if path else f"session{SESSION_EXT}"))
+            if not chosen:
+                return
+            path = Path(chosen)
+        text = self.text.get("1.0", "end-1c")
+        names = [who for who, _ in split_speakers(text, self.voices) if who]
+        if self.ref:
+            names.insert(0, self.voice_var.get())
+        settings = {k: v for k, v in self.settings().items() if k not in ("geometry", "appearance")}
+        data = {"lyrebird": "session", "format": 1, "app_version": VERSION, "script": text,
+                "settings": settings, "voices": sorted(set(names))}
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.set_session(path)
+        self.status.set(f"Saved session {path.name}.")
+
+    def open_session(self, path):
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            assert data.get("lyrebird") == "session" and isinstance(data.get("script"), str)
+        except (OSError, ValueError, AssertionError, AttributeError):
+            messagebox.showerror("Lyrebird", f"{Path(path).name} isn't a Lyrebird session.")
+            return
+        if not self.replace_script(data["script"], f"the session {Path(path).stem}"):
+            return
+        self.refresh_voices()
+        self.apply_settings(data.get("settings") or {})
+        self.sync_options()
+        self.set_session(path)
+        missing = [n for n in data.get("voices", []) if isinstance(n, str) and n not in self.voices]
+        self.status.set(f"Opened {Path(path).name}." + (f" Missing voices: {', '.join(missing)}. Record or import "
+                                                          "them under those names." if missing else ""))
 
     def save_settings(self):
         try:
@@ -771,9 +1081,9 @@ class App:
     def run_bg(self, work):
         self.busy = True
         for b in self.buttons:
-            b.state(["disabled"])
-        self.progress.configure(mode="indeterminate")
-        self.progress.start(12)
+            b.configure(state="disabled")
+        self.progress.configure(mode="indeterminate", progress_color=PLUME)
+        self.progress.start()
 
         def target():
             try:
@@ -793,10 +1103,11 @@ class App:
     def done(self):
         self.busy = False
         self.progress.stop()
-        self.progress.configure(mode="determinate", value=0)  # an idle indeterminate bar leaves a stray block
-        self.stop_button.state(["disabled"])
+        self.progress.configure(mode="determinate", progress_color=LINE)  # idle: no stray dot at 0 %
+        self.progress.set(0)
+        self.stop_button.configure(state="disabled")
         for b in self.buttons:
-            b.state(["!disabled"])
+            b.configure(state="normal")
 
     def out_folder(self):
         folder = Path(self.out_dir.get().strip() or documents_dir() / "Lyrebird").expanduser()
@@ -838,7 +1149,7 @@ class App:
                     sr, chunks = LOOPBACK_RATE, []
                     with source.recorder(samplerate=sr) as recorder:
                         for left in range(RECORD_SECONDS, 0, -1):
-                            self.ui(self.status.set, f"Recording {label}... {left}s left - play the voice now.")
+                            self.ui(self.status.set, f"Recording {label}... {left} s left. Play the voice now.")
                             chunks.append(recorder.record(numframes=sr))
                 finally:
                     ctypes.windll.ole32.CoUninitialize()
@@ -858,20 +1169,20 @@ class App:
                 else:
                     raise RuntimeError(f"Couldn't open {label}. Another app may be using it exclusively.")
                 for left in range(RECORD_SECONDS, 0, -1):
-                    self.ui(self.status.set, f"Recording from {info['name']}... {left}s left - speak now.")
+                    self.ui(self.status.set, f"Recording from {info['name']}... {left} s left. Speak now.")
                     time.sleep(1)
                 sd.wait()
                 mono = audio[:, np.abs(audio).max(axis=0).argmax()]  # keep the loudest channel
             if np.abs(mono).max() < 1e-4:
                 raise RuntimeError(f"The recording from {label} is silent, so the voice wasn't saved. "
                                    "Check the source, or for 'What you hear' make sure audio is playing.")
-            self.ui(self.status.set, "Trim the recording, then click Save.")
+            self.ui(self.status.set, "Trim the recording, then save it.")
             self.ui(self.save_voice, mono.astype(np.float32), sr, path, f'Trim "{path.stem}"')
 
         self.run_bg(work)
 
-    def import_audio(self):
-        src = filedialog.askopenfilename(title="Choose a voice sample", filetypes=AUDIO_TYPES)
+    def import_audio(self, src=None):
+        src = src or filedialog.askopenfilename(title="Choose a voice sample", filetypes=AUDIO_TYPES)
         if not src:
             return
         path = self.ask_voice_path(Path(src).stem)
@@ -881,7 +1192,7 @@ class App:
 
     def rename_voice(self):
         old = self.voice_var.get()
-        new = clean_name(simpledialog.askstring("Lyrebird", f'New name for "{old}":', initialvalue=old, parent=self.root))
+        new = clean_name(ask_text(self.root, "Lyrebird", f'New name for "{old}":', old))
         if not new or new == old:
             return
         if new.lower() != old.lower() and (voice_files(new) or voice_settings_file(new).exists()):
@@ -948,14 +1259,14 @@ class App:
             self.engine.render(**args, status=lambda msg: self.ui(self.status.set, msg))
             self.output = str(args["out_path"])
             self.ui(self.sync_play)
-            self.ui(self.status.set, f"Saved {self.output} ({time.time() - start:.0f}s).")
+            self.ui(self.status.set, f"Saved {self.output} ({time.time() - start:.0f} s).")
 
         self.run_bg(work)
-        self.stop_button.state(["!disabled"])
+        self.stop_button.configure(state="normal")
 
     def stop(self):
         self.cancel.set()
-        self.stop_button.state(["disabled"])
+        self.stop_button.configure(state="disabled")
         self.status.set("Stopping after the current chunk...")
 
     def play(self, path):
@@ -970,6 +1281,19 @@ class App:
 
     def open_folder(self):
         os.startfile(self.out_folder())
+
+
+class Root(ctk.CTk, TkinterDnD.DnDWrapper):
+    """The main window, with drag-and-drop of files onto it (tkdnd)."""
+
+    def __init__(self):
+        super().__init__()
+        try:
+            TkinterDnD._require(self)
+            self.dnd = True
+        except RuntimeError as e:  # the app still works without it; Open... does the same job
+            print(f"Drag and drop unavailable: {e}")
+            self.dnd = False
 
 
 def show_splash(root):
@@ -989,8 +1313,9 @@ def show_splash(root):
     canvas.pack()
     canvas.create_image(0, 0, image=photo, anchor="nw")
     canvas.photo = photo  # keep a reference, or Tk drops the image
-    canvas.create_text(242 * k, 284 * k, anchor="w", text=f"Version {VERSION}", fill=INK, font=("Segoe UI", 9, "bold"))
-    status = canvas.create_text(242 * k, 303 * k, anchor="w", text="Starting...", fill=INK_MUTED, font=("Segoe UI", 9))
+    # The splash art is always the light theme, so it uses the light ink colours.
+    canvas.create_text(242 * k, 284 * k, anchor="w", text=f"Version {VERSION}", fill=INK[0], font=("Segoe UI", 9, "bold"))
+    status = canvas.create_text(242 * k, 303 * k, anchor="w", text="Starting...", fill=MUTED[0], font=("Segoe UI", 9))
     win.geometry(f"+{(win.winfo_screenwidth() - w) // 2}+{(win.winfo_screenheight() - h) // 2}")
     win.update()
 
@@ -1003,12 +1328,13 @@ def show_splash(root):
 
 def main():
     try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # crisp text on high-DPI screens
         # Own taskbar identity, so Windows shows the Lyrebird icon rather than python.exe's.
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Lyrebird.App")
     except (AttributeError, OSError):
         pass
-    root = tk.Tk()
+    appearance = load_settings().get("appearance")
+    ctk.set_appearance_mode(appearance if appearance in ("Light", "Dark", "System") else "System")
+    root = Root()  # CustomTkinter also turns on per-monitor DPI awareness
     root.withdraw()  # built behind the splash, shown when ready
     icon = asset("lyrebird.ico")
     if icon:
