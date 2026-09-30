@@ -27,7 +27,9 @@ UV_ENV = {**os.environ, "UV_CACHE_DIR": str(CACHE), "UV_PYTHON_INSTALL_DIR": str
 
 
 def setup_id():
-    return hashlib.sha256(REQS.read_bytes() + CHATTERBOX.encode()).hexdigest()
+    # Normalise line endings: git gives CI (CRLF) and source checkouts (LF) different bytes for the same file.
+    text = "\n".join(REQS.read_text(encoding="utf-8").splitlines())
+    return hashlib.sha256((text + CHATTERBOX).encode()).hexdigest()
 
 
 def dir_size(path):
