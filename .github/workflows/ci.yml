@@ -14,7 +14,6 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      LYREBIRD_BUILD_DIR: ${{ runner.temp }}\lyrebird-build
       # Code signing runs on version tags once the SignPath repository variable is set (see README).
       SIGN: ${{ startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     steps:
@@ -30,6 +29,8 @@ jobs:
 
       - name: Test and build the launcher zip
         shell: pwsh
+        env:
+          LYREBIRD_BUILD_DIR: ${{ runner.temp }}\lyrebird-build  # later steps sign the app from here
         run: ./build.ps1
 
       - name: Upload the unsigned app for signing
@@ -38,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Lyrebird-unsigned
-          path: ${{ env.LYREBIRD_BUILD_DIR }}\dist\Lyrebird
+          path: ${{ runner.temp }}\lyrebird-build\dist\Lyrebird
 
       - name: Sign Lyrebird.exe (SignPath Foundation)
         if: env.SIGN == 'true'
