@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reference copy of the SignPath artifact configuration (slug "default" in the SignPath project).
+     SignPath stores the real one; paste this in when setting up the project.
+     The CI artifact is the unzipped app folder: Lyrebird.exe plus _internal\ at the root.
+     Only Lyrebird.exe is ours and gets signed; bundled upstream files (uv.exe, Python DLLs) stay as they are. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Lyrebird.exe" product-name="Lyrebird">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

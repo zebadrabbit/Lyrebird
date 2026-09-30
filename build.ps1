@@ -15,10 +15,35 @@ if (-not (Test-Path .venv)) { Exec uv venv --managed-python --python 3.12 .venv 
 Exec uv pip install --python .venv pyinstaller uv==0.11.24 "numpy<2"  # numpy: for the tests only
 Exec .venv\Scripts\python.exe test_lyrebird.py
 
-# Build under %TEMP%: OneDrive/Dropbox-synced folders lock freshly written files mid-build.
-$out = Join-Path $env:TEMP "lyrebird-build"
+# Build outside the repo: OneDrive/Dropbox-synced folders lock freshly written files mid-build.
+# CI sets LYREBIRD_BUILD_DIR so later steps (code signing) can find the unzipped app.
+$out = if ($env:LYREBIRD_BUILD_DIR) { $env:LYREBIRD_BUILD_DIR } else { Join-Path $env:TEMP "lyrebird-build" }
+New-Item -ItemType Directory -Force $out | Out-Null
+
+# Windows version info (Properties > Details). Code signing requires product name and version on the exe.
+$version = [regex]::Match((Get-Content lyrebird.py -Raw), 'VERSION = "([\d.]+)"').Groups[1].Value
+$tuple = (($version.Split(".") + @("0", "0", "0"))[0..3]) -join ", "
+@"
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers=($tuple), prodvers=($tuple)),
+  kids=[
+    StringFileInfo([StringTable('040904B0', [
+      StringStruct('CompanyName', 'Lyrebird contributors'),
+      StringStruct('FileDescription', 'Lyrebird voice cloning'),
+      StringStruct('FileVersion', '$version'),
+      StringStruct('InternalName', 'Lyrebird'),
+      StringStruct('LegalCopyright', 'MIT License'),
+      StringStruct('OriginalFilename', 'Lyrebird.exe'),
+      StringStruct('ProductName', 'Lyrebird'),
+      StringStruct('ProductVersion', '$version')])]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
+"@ | Set-Content -Encoding utf8 "$out\version_info.txt"
+
 Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebird `
     --distpath "$out\dist" --workpath "$out\build" --specpath $out `
+    --version-file "$out\version_info.txt" `
     --add-binary "$PSScriptRoot\.venv\Scripts\uv.exe;." `
     --add-data "$PSScriptRoot\lyrebird.py;." `
     --add-data "$PSScriptRoot\requirements.txt;." `
@@ -30,4 +55,4 @@ Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebir
 
 New-Item -ItemType Directory -Force dist | Out-Null
 Compress-Archive -Path "$out\dist\Lyrebird" -DestinationPath dist\Lyrebird-win64.zip -Force
-Write-Host "`nBuilt dist\Lyrebird-win64.zip (unzipped app: $out\dist\Lyrebird\Lyrebird.exe)"
+Write-Host "`nBuilt Lyrebird ${version}: dist\Lyrebird-win64.zip (unzipped app: $out\dist\Lyrebird\Lyrebird.exe)"

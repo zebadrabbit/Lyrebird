@@ -165,6 +165,28 @@ examples/          dialogue scripts to try (Turbo + sound tags)
 brand/             logo, wordmarks and app icon (lyrebird.ico, SVG, PNG)
 ```
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+- **What is signed:** `Lyrebird.exe` in each GitHub release, built by this repository's [GitHub Actions workflow](.github/workflows/ci.yml) from the tagged commit. Bundled upstream files (uv, the Python runtime) are included as their authors published them and aren't re-signed.
+- **Team roles:**
+  - Authors (committers): [@zebadrabbit](https://github.com/zebadrabbit)
+  - Reviewers (approve pull requests): [@zebadrabbit](https://github.com/zebadrabbit)
+  - Approvers (approve each signing request): [@zebadrabbit](https://github.com/zebadrabbit)
+- Everyone in these roles uses multi-factor authentication on GitHub and SignPath.
+- How signing is set up for maintainers: [docs/signing.md](docs/signing.md).
+
+## Privacy
+
+Lyrebird has no accounts, telemetry or analytics. Your recordings, voices, scripts and renders stay on your PC. It connects to other systems only to download what it needs to run:
+
+- **First launch:** Python (from GitHub, via uv) and packages such as PyTorch and Chatterbox (from PyPI and download.pytorch.org).
+- **First use of each model:** the model weights from Hugging Face. When a model loads later, Hugging Face is checked for updates; set `HF_HUB_OFFLINE=1` to turn that off.
+- **First use of Multilingual:** a Chinese word-segmentation model from GitHub.
+
+Those services see the requests like any download (your IP address, for example), under their own privacy policies. Nothing you record or type is sent anywhere.
+
 ## Responsible use
 
 Only clone voices you have permission to use. Every file Chatterbox generates carries Resemble AI's [Perth](https://github.com/resemble-ai/perth) watermark: an imperceptible mark that detection tools can find. Lyrebird doesn't remove it. Don't use this software to impersonate people, commit fraud or deceive anyone.
