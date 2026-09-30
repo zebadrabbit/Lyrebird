@@ -50,6 +50,8 @@ Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebir
     --add-data "$PSScriptRoot\brand\lyrebird.ico;." `
     --add-data "$PSScriptRoot\brand\splash.png;." `
     --add-data "$PSScriptRoot\brand\splash@2x.png;." `
+    --add-data "$PSScriptRoot\brand\lyrebird-256.png;." `
+    --collect-data customtkinter `
     --icon "$PSScriptRoot\brand\lyrebird.ico" `
     launcher.py
 

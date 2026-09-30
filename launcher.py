@@ -3,7 +3,6 @@
 First run: downloads Python, PyTorch and Chatterbox into %LOCALAPPDATA%\\Lyrebird with a progress window.
 Later runs: starts the app straight away. A release with a changed requirements.txt re-runs setup.
 """
-import ctypes
 import hashlib
 import os
 import shutil
@@ -13,7 +12,9 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox
+
+import customtkinter as ctk
 
 CHATTERBOX = "chatterbox-tts==0.1.7"  # installed with --no-deps: it pins torch 2.6, which lacks RTX 50-series support
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))  # bundled files when frozen
@@ -24,6 +25,9 @@ CACHE = HOME / "uv-cache"
 MARKER = ENV / "lyrebird-setup.txt"
 LOG = HOME / "setup.log"
 UV_ENV = {**os.environ, "UV_CACHE_DIR": str(CACHE), "UV_PYTHON_INSTALL_DIR": str(HOME / "python")}
+# Brand palette (brand/tokens.json) as (light, dark) pairs, matching the app.
+GROUND, SURFACE, LINE = ("#f2f3ee", "#111613"), ("#fbfbf8", "#19201c"), ("#d9ddd4", "#2c3631")
+INK, MUTED, PLUME = ("#18201c", "#e7ece6"), ("#56615a", "#9aa79f"), ("#a8471f", "#f0a36e")
 
 
 def setup_id():
@@ -74,22 +78,32 @@ class Setup:
         self.downloaded = 0
 
         root.title("Lyrebird setup")
+        root.configure(fg_color=GROUND)
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self.cancel)
-        frame = ttk.Frame(root, padding=16)
-        frame.pack(fill="both")
-        ttk.Label(frame, text="Setting up Lyrebird", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        ttk.Label(frame, justify="left", text="First run only: downloading Python, PyTorch and Chatterbox "
-                  "(about 3 GB with an NVIDIA GPU;\nneeds about 6 GB of disk space). Later launches start straight away.").pack(anchor="w", pady=(4, 12))
+        font = lambda size, weight="normal": ctk.CTkFont("Segoe UI", size, weight)
+        card = ctk.CTkFrame(root, fg_color=SURFACE, border_color=LINE, border_width=1, corner_radius=12)
+        card.pack(fill="both", padx=16, pady=16)
+        head = ctk.CTkFrame(card, fg_color="transparent")
+        head.pack(fill="x", padx=20, pady=(18, 0))
+        ctk.CTkFrame(head, width=8, height=8, corner_radius=4, fg_color=PLUME).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(head, text="Setting up Lyrebird", font=font(15, "bold"), text_color=INK).pack(side="left")
+        ctk.CTkLabel(card, justify="left", anchor="w", font=font(12), text_color=MUTED, wraplength=500,
+                     text="First run only: downloading Python, PyTorch and Chatterbox. That's about 3 GB with an "
+                          "NVIDIA GPU and needs about 6 GB of disk space. Later launches start straight away."
+                     ).pack(fill="x", padx=20, pady=(4, 14))
         self.step = tk.StringVar(value="Starting...")
-        ttk.Label(frame, textvariable=self.step).pack(anchor="w")
-        bar = ttk.Progressbar(frame, mode="indeterminate", length=460)
-        bar.pack(fill="x", pady=6)
-        bar.start(12)
+        ctk.CTkLabel(card, textvariable=self.step, font=font(13, "bold"), text_color=INK, anchor="w").pack(fill="x", padx=20)
+        bar = ctk.CTkProgressBar(card, mode="indeterminate", width=500, height=6, corner_radius=3,
+                                 fg_color=LINE, progress_color=PLUME)
+        bar.pack(fill="x", padx=20, pady=(8, 8))
+        bar.start()
         self.detail = tk.StringVar()
-        ttk.Label(frame, textvariable=self.detail, foreground="gray", width=72).pack(anchor="w")
+        ctk.CTkLabel(card, textvariable=self.detail, font=font(12), text_color=MUTED, anchor="w",
+                     width=500).pack(fill="x", padx=20)
         self.stats = tk.StringVar()
-        ttk.Label(frame, textvariable=self.stats, foreground="gray").pack(anchor="w", pady=(4, 0))
+        ctk.CTkLabel(card, textvariable=self.stats, font=font(12), text_color=MUTED, anchor="w"
+                     ).pack(fill="x", padx=20, pady=(2, 18))
 
         threading.Thread(target=self.measure, daemon=True).start()
         threading.Thread(target=self.work, daemon=True).start()
@@ -163,12 +177,9 @@ class Setup:
 
 
 def main():
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except (AttributeError, OSError):
-        pass
     HOME.mkdir(parents=True, exist_ok=True)
-    root = tk.Tk()
+    ctk.set_appearance_mode("System")
+    root = ctk.CTk()  # also turns on per-monitor DPI awareness
     for icon in (HERE / "lyrebird.ico", HERE / "brand" / "lyrebird.ico"):  # release bundle, then source tree
         if icon.exists():
             root.iconbitmap(default=str(icon))

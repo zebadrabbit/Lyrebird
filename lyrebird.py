@@ -20,7 +20,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Lyrebird"
 SETTINGS_FILE = APP_DIR / "settings.json"
 

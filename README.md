@@ -6,7 +6,7 @@
 
 A small Windows desktop app for voice cloning with [Chatterbox TTS](https://github.com/resemble-ai/chatterbox) by Resemble AI.
 
-1. **Record (10s)** of your voice, or **Import** a clip of someone who has agreed to be cloned.
+1. **Record 10 s** of your voice, or **Import** a clip of someone who has agreed to be cloned.
 2. Type some text. It can be a dialogue between several saved voices, with `[laugh]`-style sound tags.
 3. Click **Render**. You get a `.wav` file.
 
@@ -29,9 +29,9 @@ Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWT
 
 ## Features
 
-- **Voice library:** record 10 s from any source or import wav/mp3/flac/ogg, give it a name, and it stays in the **Voice** list. Voices are stored in `Documents\Lyrebird\voices`. The **Manage** menu renames and deletes voices.
+- **Voice library:** record 10 s from any source or import wav/mp3/flac/ogg, give it a name, and it stays in the **Voice** list. Voices are stored in `Documents\Lyrebird\voices`. The **···** menu next to the voice renames and deletes voices.
 - **Trim before saving:** each new recording or import opens a waveform view. Drag the start and end handles to keep only the clean speech. **Auto-trim** finds the speech for you, and **Play selection** lets you hear the result. With a long clip, you can cut out just the 10 seconds you want.
-- **Per-voice settings:** give any voice its own exaggeration, CFG/pace or temperature (**Manage → Voice settings...**). They apply whenever that voice speaks, so each character in a dialogue can have its own delivery.
+- **Per-voice settings:** give any voice its own exaggeration, CFG/pace or temperature (**··· → Voice settings...**). They apply whenever that voice speaks, so each character in a dialogue can have its own delivery.
 - **Recording sources:** every microphone, plus **What you hear** for each output device, which records whatever the PC is playing (for example a video of someone who has agreed to be cloned). Newly plugged-in devices show up the next time you open the list.
 - **Multi-speaker dialogue:** start a line with a saved voice's name to switch speaker:
   ```
@@ -42,17 +42,20 @@ Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWT
   A line only switches speaker when the name matches a saved voice (ignoring capitals). `Built-in` is the model's own voice. Lines without a name continue with the current speaker, and text before the first name uses the voice selected in the **Voice** list.
 - **Sound tags (Turbo model):** type or insert tags such as `[laugh]`, `[sigh]` and `[whispering]`. They're highlighted blue when the selected model supports them. With other models they turn amber and are left out when rendering, so they aren't read aloud. Unknown tags are underlined in red.
 - **Three models:** Standard (English), Turbo (English, fast) and Multilingual (23 languages).
+- **Sessions:** **Save** (Ctrl+S) stores the script and every setting in a `.lyrebird` file, and **Open...** (Ctrl+O) brings it all back. It also opens `.txt` and `.md` scripts.
+- **Drag and drop:** drop a script, a session or an audio clip anywhere on the window. An audio clip starts adding it as a voice.
+- **Calm, readable interface** in light or dark, following your Windows theme or set by hand.
 - **Output formats:** WAV 16-bit, WAV 32-bit float or FLAC 24-bit, at the model's native 24 kHz or resampled to 44.1 or 48 kHz, ready for a DAW.
 - **Stop:** cancels a render after the current chunk.
-- **Remembers your setup:** model, language, sliders, seed, output folder, format, voice, source and window size are restored on the next launch.
+- **Remembers your setup:** model, language, sliders, seed, output folder, format, voice, source, window size and light or dark mode are restored on the next launch.
 - **Any length of text:** text is split at sentence ends and line breaks into chunks of up to 300 characters (100 for Chinese, Japanese and Korean). The chunks are rendered one by one and joined with a 0.2 s gap. Splitting is needed because the models stop at about 40 s of audio per chunk.
 
 ## Options
 
 | Option | Range (default) | Models | Effect |
 |---|---|---|---|
-| **Voice** | saved voices or (Built-in voice) | all | Who speaks. It's also the speaker for any text before the first `Name:` line. **Manage** renames or deletes it, or opens **Voice settings** to give it its own slider values. |
-| **Source** | microphones and "What you hear" outputs (Windows default microphone) | all | Used by **Record (10s)**. Microphones record at the device's own sample rate and keep the loudest channel. If a mic won't open through WASAPI, Lyrebird retries it through MME and DirectSound. "What you hear" records the output device at 48 kHz and mixes it to mono. A silent recording is rejected rather than saved as a voice. |
+| **Voice** | saved voices or (Built-in voice) | all | Who speaks. It's also the speaker for any text before the first `Name:` line. The **···** menu renames or deletes it, or opens **Voice settings** to give it its own slider values. |
+| **Source** | microphones and "What you hear" outputs (Windows default microphone) | all | Used by **Record 10 s**. Microphones record at the device's own sample rate and keep the loudest channel. If a mic won't open through WASAPI, Lyrebird retries it through MME and DirectSound. "What you hear" records the output device at 48 kHz and mixes it to mono. A silent recording is rejected rather than saved as a voice. |
 | **Model** | Standard / Turbo / Multilingual (Standard) | all | **Standard:** the original 0.5B English model. Best quality, and supports every option. **Turbo:** a smaller 350M English model that's much faster and understands [sound tags](#sound-tags). **Multilingual:** the 0.5B model for 23 languages. Only one model is kept in memory; switching models unloads the previous one. |
 | **Language** | 23 languages (en) | Multilingual | The language of the *text*. The voice sample can be in any language, but one in the same language as the text sounds most natural. Supported: Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese, Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish. |
 | **Exaggeration** | 0.25 – 2.0 (0.5) | Standard, Multilingual | Emotional intensity. At 0.5 the delivery is neutral. At 0.7 and above it becomes more dramatic and tends to speed up. Very high values can become unstable. |

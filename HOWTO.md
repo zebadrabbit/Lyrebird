@@ -11,6 +11,7 @@ For what each option does in detail, see [Options in the README](README.md#optio
 - [6. Write a dialogue with several voices](#6-write-a-dialogue-with-several-voices)
 - [7. Add laughs, sighs and other sounds (Turbo)](#7-add-laughs-sighs-and-other-sounds-turbo)
 - [8. Render](#8-render)
+- [9. Save and reopen sessions](#9-save-and-reopen-sessions)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -41,25 +42,29 @@ Lyrebird opens with a splash screen showing its version while it finds your voic
 
 ![Main window](docs/images/main.png)
 
-The window is laid out top to bottom in the order you use it:
+The window has four areas. Each has a small coloured dot next to its title so it's easy to find:
 
-1. **Voice**: who should speak, and the tools to record or import new voices.
-2. **Text to speak**: what they should say.
-3. **Options**: which model to use and how expressive it should be.
-4. **Render**: where the file goes, the Render button, and progress.
+- **Script** (blue, left): what to say. It's the biggest area because it's where you'll spend most of your time.
+- **Voice** (green, top right): who speaks, where to record from, and the tools to record or import new voices.
+- **Delivery** (gold): which model to use and how expressive the speech should be.
+- **Output** (russet): where files are saved, and in which format.
+
+Along the bottom are **Render**, the one solid-coloured button, plus **Stop**, **Play output**, **Open folder** and the progress line. Along the top are **Open...**, **Save** and **Save as...** for sessions, and a **Light / Dark / System** switch. System follows your Windows theme.
+
+![Main window in dark mode](docs/images/main-dark.png)
 
 Just want to hear it work? Type a sentence and click **Render**. The model's built-in voice is used.
 
 ## 3. Add a voice
 
-Lyrebird clones a voice from a short sample. Voices are saved by name in `Documents\Lyrebird\voices` and stay in the **Voice** list for next time:
+Lyrebird clones a voice from a short sample. Voices are saved by name in `Documents\Lyrebird\voices` and stay in the voice list at the top of the **Voice** card for next time:
 
 ![Voice list](docs/images/voices.png)
 
 There are two ways to add a voice:
 
-- **Record (10s):** click it, give the voice a name, then talk for 10 seconds. The status line counts down.
-- **Import...:** pick a `.wav`, `.mp3`, `.flac` or `.ogg` file, then give it a name.
+- **Record 10 s** (with the red dot): click it, give the voice a name, then talk for 10 seconds. The status line counts down.
+- **Import...:** pick a `.wav`, `.mp3`, `.flac` or `.ogg` file, then give it a name. You can also drag an audio file from Explorer onto the window.
 
 ![Naming a voice](docs/images/name-voice.png)
 
@@ -75,11 +80,11 @@ Next, the **Trim** window shows the recording as a waveform:
 
 With a long file, such as a whole podcast episode, Lyrebird selects the first 15 seconds of speech. Drag the handles to the part you want.
 
-The new voice is selected automatically. **Play** plays the selected voice's sample. It's greyed out while **(Built-in voice)** is selected, because there's no sample to play.
+The new voice is selected automatically. **▶** next to the voice list plays its sample. It's greyed out while **(Built-in voice)** is selected, because there's no sample to play.
 
 ### Manage voices
 
-The **Manage** menu next to **Play** works on the selected voice:
+The **···** menu next to **▶** works on the selected voice:
 
 ![Manage menu](docs/images/manage.png)
 
@@ -107,18 +112,18 @@ Only clone voices you have permission to use. See [Responsible use](README.md#re
 
 ## 4. Choose a source
 
-The **Source** list shows what **Record (10s)** records from:
+The second list in the **Voice** card is the source, which is what **Record 10 s** records from:
 
 - **Microphones:** every input device Windows knows about. **(Windows default microphone)** uses whatever is set as default in Windows Sound settings.
-- **What you hear:** one entry per output device, such as your speakers or headphones. It records whatever the PC is playing on that device, so you can capture a voice from a video or call. Start the audio playing, then click **Record (10s)**. Your default output is listed first.
+- **What you hear:** one entry per output device, such as your speakers or headphones. It records whatever the PC is playing on that device, so you can capture a voice from a video or call. Start the audio playing, then click **Record 10 s**. Your default output is listed first.
 
-![Source list](docs/images/microphones.png)
+![The Voice card: voice list, play, the ··· menu, source list, Record and Import](docs/images/voice-card.png)
 
 If you plug in a device while Lyrebird is open, it appears the next time you open the list. A recording that comes out silent isn't saved: Lyrebird tells you instead. With "What you hear", that usually means nothing was playing on that output.
 
 ## 5. Type what to say
 
-Type or paste any amount of text into **Text to speak**. Long text is split at sentence ends and line breaks into short chunks, and the chunks are joined with a short pause, so a whole article works.
+Type or paste any amount of text into the **Script**. To load a script from a file, click **Open...** (Ctrl+O) and pick a `.txt` or `.md` file, or drag the file from Explorer onto the window. If the script already has text, Lyrebird asks before replacing it. Long text is split at sentence ends and line breaks into short chunks, and the chunks are joined with a short pause, so a whole article works.
 
 To speak in another language, choose **Multilingual (23 languages)** as the model and pick the **Language** of your text.
 
@@ -170,7 +175,7 @@ All 19 tags: `[laugh]` `[chuckle]` `[sigh]` `[gasp]` `[cough]` `[clear throat]` 
 
 ## 8. Render
 
-Before rendering, pick a **Format** and **Sample rate** under **Save to**:
+Before rendering, check the **Output** card: the folder, then the format and sample rate below it:
 
 - **WAV 16-bit** is the default and plays anywhere.
 - **WAV 32-bit float** and **FLAC 24-bit** suit a DAW or sample library. FLAC files are smaller.
@@ -204,6 +209,18 @@ Lyrebird remembers your model, language, sliders, seed, output folder, format, v
 - Lower **CFG / pace** for slower delivery.
 - Set a **Seed** other than 0 to make a take you like repeatable.
 
+## 9. Save and reopen sessions
+
+A session is a `.lyrebird` file holding the script and every setting: model, language, sliders, seed, selected voice and source, output folder, format and sample rate.
+
+- **Save** (Ctrl+S) saves the session. The first time, it asks where. The session's name then shows in the header and the window title.
+- **Save as...** (Ctrl+Shift+S) saves a copy under a new name.
+- **Open...** (Ctrl+O) opens a session. You can also drag a `.lyrebird` file onto the window.
+
+Sessions refer to voices by name; they don't contain the voice recordings. If a session uses a voice that isn't in your voice library, for example after you've moved it to another PC, the status line names the missing voices. Record or import them under those names, or copy the files from `Documents\Lyrebird\voices` along with the session.
+
+Lyrebird also remembers your last settings, window size and light or dark choice on its own. Sessions are for keeping several projects apart.
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -212,7 +229,7 @@ Lyrebird remembers your model, language, sliders, seed, output folder, format, v
 | "Lyrebird failed to start" | See `%LOCALAPPDATA%\Lyrebird\lyrebird.log`. To force a fresh setup, delete `%LOCALAPPDATA%\Lyrebird\env`. |
 | Rendering is very slow | The status line says `on CPU` when the model loads: no usable NVIDIA GPU was found. Updating the NVIDIA driver and deleting `%LOCALAPPDATA%\Lyrebird\env` makes setup pick the GPU build. |
 | "Couldn't open … Another app may be using it exclusively" | Close apps that might hold the mic (voice chat, games, recording software), or turn off Windows' "Allow applications to take exclusive control of this device" in the mic's Sound Control Panel properties (Advanced tab). |
-| A microphone is missing | Open the **Source** list again to rescan. Check that Windows lists the mic under Settings → System → Sound → Input. |
+| A microphone is missing | Open the source list again to rescan. Check that Windows lists the mic under Settings → System → Sound → Input. |
 | "The recording ... is silent" | For a microphone: choose the right one, and check Windows' microphone privacy setting: Settings → Privacy & security → Microphone → "Let desktop apps access your microphone". For **What you hear**: make sure audio is playing on that output device while you record. |
 | "Audio prompt must be longer than 5 seconds" | Turbo needs a longer sample. Record again, or import a longer clip. |
 | A voice sounds wrong in dialogue | Make sure the name before the colon turned bold blue. If it didn't, it doesn't match a saved voice exactly. |
