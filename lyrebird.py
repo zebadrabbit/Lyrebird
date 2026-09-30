@@ -20,7 +20,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 APP_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Lyrebird"
 SETTINGS_FILE = APP_DIR / "settings.json"
 
@@ -95,6 +95,7 @@ RECORD_RED = ("#c01c28", "#ff7b82")
 EDITOR = {"speaker": ("#1a5fb4", "#8fb8f0"), "tag": ("#0b4f8a", "#b5d6ff"), "tag_bg": ("#d7ebff", "#13314f"),
           "tag_off": ("#8a5a00", "#f2cf73"), "tag_off_bg": ("#fff0c2", "#3d2e05"), "tag_bad": ("#c01c28", "#ff7b82")}
 SLIDER_STYLE = dict(fg_color=LINE, progress_color=PLUME, button_color=PLUME, button_hover_color=PLUME_HOVER)
+WHEEL_STEP = 0.05  # CTk's default wheel step; set to 0 on disabled sliders, whose wheel handler ignores state
 OFF = ("#b9bfb6", "#46514b")  # a control that doesn't apply to the selected model
 
 
@@ -613,7 +614,8 @@ class VoiceSettingsDialog(ctk.CTkToplevel):
             slider = ctk.CTkSlider(grid, from_=lo, to=hi, variable=value, width=200, **SLIDER_STYLE,
                                    command=lambda v, s=shown: s.configure(text=f"{v:.2f}"))
             shown.configure(text=f"{value.get():.2f}")
-            toggle = lambda u=use, s=slider: s.configure(state="normal" if u.get() else "disabled")
+            toggle = lambda u=use, s=slider: s.configure(state="normal" if u.get() else "disabled",
+                                                         scroll_step=WHEEL_STEP if u.get() else 0)
             ctk.CTkSwitch(grid, text=label, variable=use, command=toggle, font=f["body"], text_color=INK,
                           progress_color=PLUME, button_color=SURFACE, button_hover_color=GROUND, fg_color=LINE
                           ).grid(row=row, column=0, sticky="w", pady=6)
@@ -869,7 +871,8 @@ class App:
         for key in ("exaggeration", "cfg_weight"):  # Turbo ignores these: grey them out, don't just lock them
             scale, name = self.sliders[key].widgets
             on = kind != "turbo"
-            scale.configure(state="normal" if on else "disabled", button_color=PLUME if on else OFF,
+            scale.configure(state="normal" if on else "disabled", scroll_step=WHEEL_STEP if on else 0,
+                            button_color=PLUME if on else OFF,
                             progress_color=PLUME if on else OFF)
             name.configure(text_color=INK if on else MUTED)
         self.lang_menu.configure(state="normal" if kind == "multilingual" else "disabled")
@@ -965,7 +968,7 @@ class App:
                    (self.format_var, "format", FORMATS), (self.rate_var, "sample_rate", RATES),
                    (self.voice_var, "voice", [BUILTIN_VOICE, *self.voices]), (self.source_var, "source", [DEFAULT_MIC, *self.sources]))
         for var, key, allowed in choices:
-            if s.get(key) in allowed:
+            if isinstance(s.get(key), str) and s[key] in allowed:
                 var.set(s[key])
         for key, var in self.sliders.items():
             _, lo, hi, _ = SLIDERS[key]
@@ -1062,12 +1065,14 @@ class App:
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
             assert data.get("lyrebird") == "session" and isinstance(data.get("script"), str)
+            assert isinstance(data.get("settings", {}), dict) and isinstance(data.get("voices", []), list)
         except (OSError, ValueError, AssertionError, AttributeError):
             messagebox.showerror("Lyrebird", f"{Path(path).name} isn't a Lyrebird session.")
             return
         if not self.replace_script(data["script"], f"the session {Path(path).stem}"):
             return
-        self.refresh_voices()
+        self.refresh_voices(BUILTIN_VOICE)  # a missing voice or source falls back to the defaults
+        self.source_var.set(DEFAULT_MIC)
         self.apply_settings(data.get("settings") or {})
         self.sync_options()
         self.set_session(path)

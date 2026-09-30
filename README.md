@@ -65,7 +65,7 @@ Everything runs locally on your PC. **Step-by-step guide with screenshots: [HOWT
 | **Save to** | folder (`Documents\Lyrebird`) | all | Where renders are written, as `lyrebird_<YYYYmmdd_HHMMSS>.wav` (or `.flac`). The folder is created if it doesn't exist. |
 | **Format** | WAV 16-bit / WAV 32-bit float / FLAC 24-bit (WAV 16-bit) | all | File type of the render. **Play output** plays 16-bit WAV directly; other formats open in your default player. |
 | **Sample rate** | 24 kHz (model native) / 44.1 kHz / 48 kHz (24 kHz) | all | The models produce 24 kHz. The other rates resample the result, which doesn't add detail but saves converting it later. |
-| **Voice settings** | per voice: Exaggeration, CFG / pace, Temperature (off) | all | Ticked values replace the main sliders whenever that voice speaks. They're saved as `voices\<name>.json` next to the sample. Turbo only uses Temperature. |
+| **Voice settings** | per voice: Exaggeration, CFG / pace, Temperature (off) | all | Settings switched on replace the main sliders whenever that voice speaks. They're saved as `voices\<name>.json` next to the sample. Turbo only uses Temperature. |
 
 Exaggeration and CFG are greyed out for Turbo because the Turbo model doesn't support them. Language is greyed out except for Multilingual.
 

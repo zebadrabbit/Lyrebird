@@ -95,7 +95,7 @@ The **···** menu next to **▶** works on the selected voice:
 
 ### Give a voice its own settings
 
-In **Voice settings**, tick a setting to give the voice its own value. Unticked settings follow the main sliders.
+In **Voice settings**, switch a setting on to give the voice its own value. Settings left off follow the main sliders.
 
 ![Voice settings](docs/images/voice-settings.png)
 
