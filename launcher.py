@@ -129,7 +129,8 @@ class Setup:
     def work(self):
         py = ("--python", ENV)
         try:
-            self.run("Step 1 of 3: Downloading Python", "venv", "--managed-python", "--python", "3.12", "--allow-existing", ENV)
+            if not (ENV / "Scripts" / "python.exe").exists():  # an update reuses it; it may be in use by an open Lyrebird
+                self.run("Step 1 of 3: Downloading Python", "venv", "--managed-python", "--python", "3.12", ENV)
             try:
                 self.run("Step 2 of 3: Downloading PyTorch and libraries", "pip", "install", *py, "-r", REQS, "--torch-backend", "auto")
             except RuntimeError:
@@ -145,8 +146,13 @@ class Setup:
             self.ui(self.fail, e)
 
     def fail(self, error):
-        messagebox.showerror("Lyrebird setup", f"{error}\n\nCheck your internet connection and start Lyrebird again; "
-                             f"setup resumes where it stopped.\n\nDetails: {LOG}")
+        reason = next((line.strip() for line in reversed(getattr(self, "output", []))
+                       if line.strip().startswith(("error:", "Caused by:"))), "")
+        if "Access is denied" in reason or "being used by another process" in reason:
+            hint = "Lyrebird may already be open. Close it, then start Lyrebird again."
+        else:
+            hint = "Check your internet connection and start Lyrebird again; setup resumes where it stopped."
+        messagebox.showerror("Lyrebird setup", f"{error}\n{reason}\n\n{hint}\n\nDetails: {LOG}")
         self.root.destroy()
 
     def cancel(self):
