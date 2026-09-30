@@ -12,7 +12,7 @@ function Exec($exe) {
 
 if (-not (Test-Path .venv)) { Exec uv venv --managed-python --python 3.12 .venv }
 # The uv package ships uv.exe, which the launcher bundles to install everything on the user's PC.
-Exec uv pip install --python .venv pyinstaller uv==0.11.24
+Exec uv pip install --python .venv pyinstaller uv==0.11.24 "numpy<2"  # numpy: for the tests only
 Exec .venv\Scripts\python.exe test_lyrebird.py
 
 # Build under %TEMP%: OneDrive/Dropbox-synced folders lock freshly written files mid-build.
@@ -23,6 +23,8 @@ Exec .venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --name Lyrebir
     --add-data "$PSScriptRoot\lyrebird.py;." `
     --add-data "$PSScriptRoot\requirements.txt;." `
     --add-data "$PSScriptRoot\brand\lyrebird.ico;." `
+    --add-data "$PSScriptRoot\brand\splash.png;." `
+    --add-data "$PSScriptRoot\brand\splash@2x.png;." `
     --icon "$PSScriptRoot\brand\lyrebird.ico" `
     launcher.py
 

@@ -35,6 +35,10 @@ If you close the window or lose your connection, start Lyrebird again. Setup pic
 
 ## 2. The main window
 
+Lyrebird opens with a splash screen showing its version while it finds your voices and audio devices:
+
+![Splash screen](docs/images/splash.png)
+
 ![Main window](docs/images/main.png)
 
 The window is laid out top to bottom in the order you use it:
@@ -59,7 +63,38 @@ There are two ways to add a voice:
 
 ![Naming a voice](docs/images/name-voice.png)
 
-A new voice is selected automatically. **Play** plays the selected voice's sample. It's greyed out while **(Built-in voice)** is selected, because there's no sample to play. **Folder** opens the voices folder, where you can rename or delete voices; the list updates the next time you open it.
+Next, the **Trim** window shows the recording as a waveform:
+
+![Trimming a new voice](docs/images/trim.png)
+
+- The highlighted part is what gets saved. Lyrebird starts with the speech already selected and the silence at each end cut off.
+- **Drag** in the waveform to move the nearest handle, the start or the end.
+- **Play selection** plays just the highlighted part. **Auto-trim** goes back to the automatic selection.
+- The line under the waveform shows the length. It turns amber below 5 seconds (too short for Turbo) and above 20 seconds (longer than it needs to be).
+- **Save** stores the voice. **Cancel** throws the take away.
+
+With a long file, such as a whole podcast episode, Lyrebird selects the first 15 seconds of speech. Drag the handles to the part you want.
+
+The new voice is selected automatically. **Play** plays the selected voice's sample. It's greyed out while **(Built-in voice)** is selected, because there's no sample to play.
+
+### Manage voices
+
+The **Manage** menu next to **Play** works on the selected voice:
+
+![Manage menu](docs/images/manage.png)
+
+- **Rename...** gives the voice a new name. Update any dialogue lines that used the old name.
+- **Delete** removes the voice and its sample file, after asking first.
+- **Voice settings...** gives this voice its own exaggeration, CFG/pace or temperature (see below).
+- **Open voices folder** opens `Documents\Lyrebird\voices` in Explorer.
+
+### Give a voice its own settings
+
+In **Voice settings**, tick a setting to give the voice its own value. Unticked settings follow the main sliders.
+
+![Voice settings](docs/images/voice-settings.png)
+
+A voice's own settings apply whenever it speaks, including in dialogues, so a calm narrator and an excitable character can share one script. They're saved next to the sample as `<name>.json`, and they follow the voice when you rename it. Turbo only uses **Temperature**, because it ignores the other two.
 
 **For a good clone:**
 
@@ -135,6 +170,12 @@ All 19 tags: `[laugh]` `[chuckle]` `[sigh]` `[gasp]` `[cough]` `[clear throat]` 
 
 ## 8. Render
 
+Before rendering, pick a **Format** and **Sample rate** under **Save to**:
+
+- **WAV 16-bit** is the default and plays anywhere.
+- **WAV 32-bit float** and **FLAC 24-bit** suit a DAW or sample library. FLAC files are smaller.
+- **44.1 kHz** and **48 kHz** resample the model's 24 kHz output to match your project, so you don't have to convert it later.
+
 Click **Render**. The progress bar moves, and the status line says what's happening:
 
 ![Rendering in progress](docs/images/rendering.png)
@@ -142,6 +183,7 @@ Click **Render**. The progress bar moves, and the status line says what's happen
 - **Downloading … GB so far** appears only the first time you use each model. Each model is a one-time 3 to 4 GB download.
 - **Analysing voice …** means Lyrebird is reading a voice sample.
 - **Rendering chunk 2/4 (Bob)** shows which part is being spoken and by whom.
+- **Stop** cancels the render after the chunk that's in progress. Nothing is saved.
 
 When it finishes, the status line shows where the file was saved:
 
@@ -149,9 +191,11 @@ When it finishes, the status line shows where the file was saved:
 
 Then:
 
-- **Play output** plays the result.
+- **Play output** plays the result. 16-bit WAV plays inside Lyrebird; float WAV and FLAC open in your default player.
 - **Open folder** opens the output folder in Explorer.
-- Every render gets its own file, `lyrebird_<date>_<time>.wav`, so nothing is overwritten.
+- Every render gets its own file, `lyrebird_<date>_<time>.wav` (or `.flac`), so nothing is overwritten.
+
+Lyrebird remembers your model, language, sliders, seed, output folder, format, voice, source and window size, and restores them the next time it opens.
 
 **If a take sounds off**, click Render again for a new variation, or try these:
 

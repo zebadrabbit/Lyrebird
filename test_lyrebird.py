@@ -3,7 +3,8 @@ import tempfile
 from pathlib import Path
 
 import lyrebird
-from lyrebird import chunk_text, drop_older_versions, split_speakers, strip_tags, voice_files
+from lyrebird import (chunk_text, clean_name, drop_older_versions, load_voice_settings, speech_bounds,
+                      split_speakers, strip_tags, voice_files)
 
 
 def test_chunk_text():
@@ -49,9 +50,41 @@ def test_voice_replacement():
         assert sorted(p.name for p in Path(tmp).iterdir()) == ["Alice notes.txt", "Alice.flac", "Bob.wav"]
 
 
+def test_speech_bounds():
+    import numpy as np
+
+    sr = 1000
+    audio = np.zeros(10 * sr, dtype=np.float32)
+    audio[3 * sr:7 * sr] = 0.5 * np.sin(np.arange(4 * sr))  # speech from 3 s to 7 s, silence around it
+    start, end = speech_bounds(audio, sr, pad=0.1)
+    assert abs(start - 2.9 * sr) <= 10 and abs(end - 7.1 * sr) <= 10, (start, end)
+    assert speech_bounds(np.zeros(sr, dtype=np.float32), sr) == (0, sr)  # all silent: keep everything
+    assert speech_bounds(np.zeros(3, dtype=np.float32), sr) == (0, 3)  # shorter than one frame
+
+
+def test_clean_name():
+    assert clean_name('  My: "voice"?. ') == "My_ _voice__"
+    assert clean_name(None) == "" and clean_name(" ... ") == ""
+
+
+def test_voice_settings():
+    with tempfile.TemporaryDirectory() as tmp:
+        lyrebird.voices_dir = lambda: Path(tmp)
+        assert load_voice_settings("Alice") == {}  # no file
+        (Path(tmp) / "Alice.json").write_text('{"temperature": 0.4, "bogus": 1}')
+        assert load_voice_settings("Alice") == {"temperature": 0.4}  # unknown keys dropped
+        (Path(tmp) / "Alice.json").write_text("not json")
+        assert load_voice_settings("Alice") == {}
+        (Path(tmp) / "Alice.json").write_text("[1, 2]")
+        assert load_voice_settings("Alice") == {}
+
+
 if __name__ == "__main__":
     test_chunk_text()
     test_split_speakers()
     test_strip_tags()
     test_voice_replacement()
+    test_speech_bounds()
+    test_clean_name()
+    test_voice_settings()
     print("ok")

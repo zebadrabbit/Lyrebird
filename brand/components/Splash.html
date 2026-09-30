@@ -1,0 +1,34 @@
+<!-- Source for brand/splash.png and brand/splash@2x.png (rendered by brand/render-splash.ps1).
+     The bottom-right band is left empty: the app draws the version and loading status there. -->
+<!doctype html>
+<html lang="en" data-theme="light"><head><meta charset="utf-8"><title>Lyrebird splash</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+html,body{margin:0;width:560px;height:320px;overflow:hidden;background:var(--ground)}
+.splash{display:flex;width:560px;height:320px}
+.art{position:relative;width:208px;background:var(--fern);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.art img{width:132px;height:132px;position:relative;z-index:1}
+.barbs{position:absolute;left:16px;bottom:20px;display:flex;flex-direction:column;gap:6px}
+.barbs i{display:block;height:6px;border-radius:3px;background:var(--lyre);opacity:.55}
+.words{flex:1;padding:44px 32px 0 32px;box-sizing:border-box;position:relative}
+.name{margin:0;font-family:"Bricolage Grotesque";font-weight:800;font-size:60px;line-height:.95;letter-spacing:-.02em;color:var(--ink)}
+.tag{margin:12px 0 0 2px;font-family:"Atkinson Hyperlegible Next";font-size:17px;line-height:24px;color:var(--ink-muted)}
+.rule{display:flex;gap:6px;margin:22px 0 0 2px;align-items:center}
+.rule i{display:block;width:6px;border-radius:3px;background:var(--plume)}
+.credit{position:absolute;left:34px;bottom:64px;font-family:"Atkinson Hyperlegible Next";font-size:12px;line-height:16px;color:var(--ink-muted)}
+.band{position:absolute;left:0;right:0;bottom:0;height:52px;border-top:1px solid var(--line)}
+</style></head><body>
+<div class="splash">
+  <div class="art">
+    <div class="barbs" aria-hidden="true"><i style="width:28px"></i><i style="width:52px"></i><i style="width:40px"></i><i style="width:64px"></i><i style="width:34px"></i></div>
+    <img src="../logos/lyrebird-mark-on-dark.svg" alt="">
+  </div>
+  <div class="words">
+    <h1 class="name">Lyrebird</h1>
+    <p class="tag">Hear it once. Say it in any voice.</p>
+    <div class="rule" aria-hidden="true"><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:18px"></i><i style="height:26px"></i><i style="height:10px"></i><i style="height:16px"></i><i style="height:6px"></i></div>
+    <div class="credit">Voice cloning with Chatterbox TTS by Resemble AI</div>
+    <div class="band"></div>
+  </div>
+</div>
+</body></html>
